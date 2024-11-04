@@ -1,0 +1,161 @@
+\documentclass{article}
+\usepackage{mathtools}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{bm}
+
+\setlength{\parindent}{0pt}
+
+\DeclarePairedDelimiter{\br}{(}{)}
+\DeclarePairedDelimiter{\brr}{[}{]}
+\DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+
+\makeatletter
+\let\oldbr\br
+\def\br{\@ifstar{\oldbr}{\oldbr*}}
+\makeatother
+
+\makeatletter
+\let\oldbrr\brr
+\def\brr{\@ifstar{\oldbrr}{\oldbrr*}}
+\makeatother
+
+\makeatletter
+\let\oldabs\abs
+\def\abs{\@ifstar{\oldabs}{\oldabs*}}
+\makeatother
+
+\def\noval{}
+\newcommand{\E}[2][\noval]{%
+    \ifx#1\noval%
+        \mathbb{E}\brr{#2}
+    \else
+        \mathbb{E}_{#1}\brr{#2}
+    \fi
+}
+\newcommand{\var}[2][\noval]{%
+    \ifx#1\noval%
+        \text{Var}\br{#2}
+    \else
+        \text{Var}_{#1}\br{#2}
+    \fi
+}
+\newcommand{\cov}[2][\noval]{%
+    \ifx#1\noval%
+        \text{Cov}\br{#2}
+    \else
+        \text{Cov}_{#1}\br{#2}
+    \fi
+}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\text{T}}
+\renewcommand{\v}{\bm}
+\renewcommand{\c}[2]{\left(#1\;\middle|\;#2\right)}
+\renewcommand{\det}[1]{\text{det}\br{#1}}
+
+
+\begin{document}
+\section*{Probability and Information Theory}
+\empty
+\subsubsection*{Random Variables}
+Variable $X$ that can take on different values $x$ randomly. 
+
+\subsubsection*{Probability Distributions}
+Discrete variables: probability mass function \\
+Continous variables: probability density \\
+Define $p(x) := p(X=x)$
+
+\subsubsection*{Marginal Probability}
+\begin{flalign*}
+    p(x) = \int p(x,y) dy &&
+\end{flalign*}
+
+\subsubsection*{Conditional Probability}
+Probability of some event, given that other event has happened:
+\begin{flalign*}
+    P\c{Y=y}{X = x} = \frac{P(Y=y, X=x)}{P(X = x)} & &
+\end{flalign*}
+Chain rule:
+\begin{flalign*}
+    P(x_1, \ldots, x_n) = \prod_{i=1}^n P\c{x_i}{x_1, \ldots, x_{i-1}} &&
+\end{flalign*}
+
+\subsubsection*{Independence, Conditional Independence}
+Random variables $X, Y$ independent ($X \perp Y$):
+\begin{flalign*}
+    \forall x \in X, y \in Y : \quad p(X=x, Y=y) = p(X=x)p(Y=y) &&
+\end{flalign*}
+
+Conditionally independent ($X\perp Y | Z$):
+\begin{flalign*}
+    \forall x \in X, y \in Y, z \in Z : \quad p(X=x,Y=y,Z=z) = p\c{X=x}{Z=z} p\c{Y=y}{Z=z} &&
+\end{flalign*}
+
+\subsubsection*{Expectation, Variance and Covariance}
+Expectation / expected value of function $f(x)$ w.r.t. $P(X)$ is average value that $f$ takes when $x$ drawn from $P$
+\begin{flalign*}
+    \E[x \sim p]{f(x)} := \int p(x)f(x)dx &&
+\end{flalign*}
+Variance is measure of how much $f(x)$ vary as different values $x$ from distribution sampled:
+\begin{flalign*}
+    \var{f(x)} := \E{\br{f(x) - \E{f(x)}}^2} &&
+\end{flalign*}
+Low variance $\rightarrow$ values of $f(x)$ cluster near expected value \\
+Variance = square of standard deviation \\
+\\
+\\
+Covariance gives sense of how two values linearly related to each other:
+\begin{flalign*}
+    \cov{f(x), g(y)} := \E{\br{f(x)-\E{f(x)}}\br{g(y)-\E{g(y)}}} &&
+\end{flalign*}
+Covariance matrix of random vector $\v{x} \in \R^n$:
+\begin{flalign*}
+    \cov{\v{x}}_{i,j} = \cov{x_i, x_j} &&
+\end{flalign*}
+\\
+Identities:
+\begin{flalign*}
+    & \mu := \E{x} && \\
+    & \sigma^2 := \var{x} = \E{\br{x - \E{x}}^2} = \E{x^2} - 2 \, \E{x \, \E{x}} + \E{\E{x}^2} = \E{x^2} - \E{x}^2 &&
+\end{flalign*}
+
+\subsubsection*{Probability Distributions}
+Normal / Gaussian distribution:
+\begin{flalign*}
+    &p(x) = \mathcal{N}(x; \mu, \sigma^2) := \sqrt{\frac{1}{2\pi\sigma}} \exp\br{-\frac{1}{2\sigma^2}(x-\mu)^2} &&\\
+    \intertext{with properties:}
+    &\E[x \sim \mathcal{N}(x; \mu, \sigma^2)]{x} = \mu &&\\
+    &\var[x \sim \mathcal{N}(x; \mu, \sigma^2)]{x} = \sigma^2 &&
+\end{flalign*}
+
+$n$-variate normal distribution:
+\begin{flalign*}
+    \mathcal{N}(\v{x}; \v{\mu}, \v{\Sigma}) %
+    = \sqrt{\frac{1}{(2\pi)^n \text{det}(\v{\Sigma})}} \exp\br{-\frac{1}{2} (\v{x} - \v{\mu})^\T \v{\Sigma}^{-1}(\v{x}- \v{\mu})} &&
+\end{flalign*}
+\\
+\\
+Empirical distribution:
+\begin{flalign*}
+    \hat{p}(\v{x}) = \frac{1}{m} \sum_{i=1}^{m} \delta(\v{x} - \v{x}_i) &&
+    \intertext{Puts probability mass $\frac{1}{m}$ on each of the $m$ observed samples $\v{x}_i$}
+\end{flalign*}
+
+\subsubsection*{Bayes Rule}
+Obtaining $P\c{X}{Y}$ given $P\c{Y}{X}$:
+\begin{flalign*}
+    &P\c{X}{Y} = \frac{ P(X) P\c{Y}{X} } { P(Y) } &&\\
+    \intertext{We can usually compute:}
+    &P(y) = \sum_{x} P\c{y}{x} P(x) &&
+\end{flalign*}
+
+\subsubsection*{Functions of random variables}
+Given $y := g(x)$ invertible and $x \sim p_x(x)$
+\begin{flalign*}
+    & \int_{a}^{b} p_x(x) dx \overset{!}{=} \int_{g(a)}^{g(b)} p_y(y) dy = \int_{a}^{b} p_y(g(x)) \frac{dg}{dx} dx &&\\ 
+    & \implies p_x(x) = p_y(g(x)) \frac{dg}{dx} &&\\
+    \intertext{In higher dimensions:}
+    & p_{\v{x}} (\v{x}) = p_{\v{y}} (\v{g}(\v{x})) \abs{\det{\frac{\partial \v{g}}{\partial \v{x}}}} &&
+\end{flalign*}
+
+\end{document}
