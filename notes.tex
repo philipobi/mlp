@@ -3,6 +3,7 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{bm}
+\usepackage{relsize}
 
 \setlength{\parindent}{0pt}
 
@@ -23,6 +24,13 @@
 \makeatletter
 \let\oldabs\abs
 \def\abs{\@ifstar{\oldabs}{\oldabs*}}
+\makeatother
+
+\makeatletter
+\let\oldlog\log
+\def\log{\@ifstar\@log\@@log}
+\def\@log#1{\oldlog\br{#1}}
+\def\@@log#1{\oldlog#1}
 \makeatother
 
 \def\noval{}
@@ -52,11 +60,11 @@
 \renewcommand{\v}{\bm}
 \renewcommand{\c}[2]{\left(#1\;\middle|\;#2\right)}
 \renewcommand{\det}[1]{\text{det}\br{#1}}
-
+\newcommand{\ml}[1]{\mathlarger{#1}\,}
+\newcommand{\dkl}[2]{D_{\text{KL}}(#1\;\Vert\;#2)}
 
 \begin{document}
-\section*{Probability and Information Theory}
-\empty
+\section*{Probability}
 \subsubsection*{Random Variables}
 Variable $X$ that can take on different values $x$ randomly. 
 
@@ -94,7 +102,7 @@ Conditionally independent ($X\perp Y | Z$):
 \subsubsection*{Expectation, Variance and Covariance}
 Expectation / expected value of function $f(x)$ w.r.t. $P(X)$ is average value that $f$ takes when $x$ drawn from $P$
 \begin{flalign*}
-    \E[x \sim p]{f(x)} := \int p(x)f(x)dx &&
+    \E[X \sim p]{f(x)} := \int p(x)f(x)dx &&
 \end{flalign*}
 Variance is measure of how much $f(x)$ vary as different values $x$ from distribution sampled:
 \begin{flalign*}
@@ -124,14 +132,14 @@ Normal / Gaussian distribution:
 \begin{flalign*}
     &p(x) = \mathcal{N}(x; \mu, \sigma^2) := \sqrt{\frac{1}{2\pi\sigma}} \exp\br{-\frac{1}{2\sigma^2}(x-\mu)^2} &&\\
     \intertext{with properties:}
-    &\E[x \sim \mathcal{N}(x; \mu, \sigma^2)]{x} = \mu &&\\
+    &\E[X \sim \mathcal{N}(x; \mu, \sigma^2)]{x} = \mu &&\\
     &\var[x \sim \mathcal{N}(x; \mu, \sigma^2)]{x} = \sigma^2 &&
 \end{flalign*}
-
+\\
 $n$-variate normal distribution:
 \begin{flalign*}
     \mathcal{N}(\v{x}; \v{\mu}, \v{\Sigma}) %
-    = \sqrt{\frac{1}{(2\pi)^n \text{det}(\v{\Sigma})}} \exp\br{-\frac{1}{2} (\v{x} - \v{\mu})^\T \v{\Sigma}^{-1}(\v{x}- \v{\mu})} &&
+    = \sqrt{\frac{1}{(2\pi)^n \text{det}(\v{\Sigma})}} \exp\br{-\frac{1}{2} (\v{x} - \v{\mu})^T \v{\Sigma}^{-1}(\v{x}- \v{\mu})} &&
 \end{flalign*}
 \\
 \\
@@ -157,5 +165,88 @@ Given $y := g(x)$ invertible and $x \sim p_x(x)$
     \intertext{In higher dimensions:}
     & p_{\v{x}} (\v{x}) = p_{\v{y}} (\v{g}(\v{x})) \abs{\det{\frac{\partial \v{g}}{\partial \v{x}}}} &&
 \end{flalign*}
+
+\section*{Information Theory}
+\subsubsection*{Information content}
+Desired properties of information measure:
+\begin{itemize}
+    \item Information content of event should depend on its likelihood (low/high likelihood $\leftrightarrow$ high/low information)
+    \item Independent events should have additive information: e.g. $I(2\times \text{Heads}) \overset{!}{=} 2\cdot I(\text{Heads})$
+\end{itemize}
+
+Define self-information of event $X=x$ as:
+\begin{flalign*}
+    I(X=x) := -\log{p(X=x)} && 
+\end{flalign*}
+
+\subsubsection*{Shannon entropy}
+Quantification of uncertainty in probability distribution:
+\begin{flalign*}
+    H(X) := \E[X \sim p]{I(x)} &&
+\end{flalign*}
+$\rightarrow$ Expectation value of self-information
+
+\subsubsection*{Kullback-Leibler (KL) divergence}
+Measure of how different distributions $P(X)$ and $Q(X)$ over same variable $X$ are:
+\begin{flalign*}
+    \dkl{P}{Q} := \E[X \sim P]{\log{\frac{P(x)}{Q(x)}}} &&
+\end{flalign*}
+Properties:\\
+$\dkl{P}{Q} \geq 0, \ \dkl{P}{Q} = 0 \iff P(X) = Q(X)$ \\ 
+$\rightarrow$ concept of distance between distributions, however not symmetric so it makes difference which divergence is minimized \\
+Proof: %https://stats.stackexchange.com/a/335201
+\begin{flalign*}
+    &\forall a > 0: \quad \log{a} \leq a - 1 &&\\
+    & -\dkl{p}{q} = \sum_x p(x) \log{\frac{q(x)}{p(x)}} \leq \sum_x p(x) \br{\frac{q(x)}{p(x)} - 1} = \sum_x q(x) - \sum_x p(x) = 1 - 1 = 0 &&\\
+    &\iff \dkl{p}{q} \geq 0
+    \intertext{Since $\log{a} < a - 1$ for $a\neq 1$:}
+    & -\dkl{p}{q} = \sum_x p(x) \br{\frac{q(x)}{p(x)} - 1} = 0 \iff \forall x: \quad p(x) = q(x) &&
+\end{flalign*}
+
+\subsubsection*{Cross-Entropy}
+\begin{flalign*}
+    H(P,Q) = -\E[X\sim p]{\log{Q(x)}} &&
+\end{flalign*}
+Minimizing cross-entropy with respect to $Q$ equivalent to minimizing KL divergence, since variation of $Q$ does not affect omitted term
+
+\section*{Numerical Computation}
+\subsubsection*{Overflow and Underflow}
+Discrete representation of real numbers can lead to accumulation of rounding error resulting in algorithm failure \\
+Underflow: number near zero rounded to zero $\rightarrow$ problem: zero division, $\log 0$
+Overflow: large numbers approximated to $\pm\infty$ $\rightarrow$ problem: NaN in further arithmetic
+
+\subsubsection*{Poor Conditioning}
+Conditioning: how rapidly does function change for small variation in inputs $\rightarrow$ possibly large changes due to rounding error
+
+\subsubsection*{Gradent-Based Optimization}
+Problem in machine / deep learning: high-dimensional, often many local minima, saddle points surrounded by very flat regions
+\begin{flalign*}
+    & \text{Jacobian} \ J_{i,j} := \frac{\partial f(\v{x})_i}{\partial x_j} && \\
+    &\rightarrow \text{Jacobian of scalar function is transpose of its gradient}&&\\
+    & \text{Hessian} \ H_{i,j} := \frac{\partial^2 f(\v{x})}{\partial x_i \partial x_j} \quad &&\\
+    &\rightarrow \text{Jacobian of gradient of a scalar function} &&
+\end{flalign*}
+Interchangeability of partial derivatives $\implies \; \v{H}$ symmetric, can be decomposed in basis of eigenvectors \\
+Eigenvalue = second derivative in direction of corresponding eigenvector
+
+\begin{flalign*}
+    \v{H} \; \begin{cases*}
+        \text{positive definite} &$\implies$ local minimum \\
+        \text{negative definite} &$\implies$ local maximum \\
+        \text{pos. and neg. eigenvalues} &$\implies$ saddle point \\
+        \text{at least one zero eigenvalue} &$\implies$ inconclusive in that direction \\
+    \end{cases*} 
+\end{flalign*}
+Large differences in magnitude of Hessian eigenvalues ($\rightarrow$ curvature) problematic due to overshooting with gradient descent
+\begin{flalign*}
+    f(\v{x}) \approx f(\v{x}_0) + (\v{x} - \v{x}_0)^T \v{g} + \frac{1}{2} (\v{x} - \v{x}_0)^T \v{H} (\v{x} - \v{x}_0) &&
+\end{flalign*}
+can be used to estimate optimal step size $\epsilon^*$ for gradient descent step with $\v{x} = \v{x}_0 - \epsilon \v{g}$ \\
+
+
+
+Optimization algorithms using only gradent $\rightarrow$ first-order optimization algorithms, using Hessian second-order
+
+
 
 \end{document}
