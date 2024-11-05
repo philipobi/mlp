@@ -14,7 +14,8 @@
 \DeclarePairedDelimiter{\brs}{\{}{\}}
 \DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
 \DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
-
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
 
 \makeatletter
 \let\oldbr\br
@@ -82,6 +83,8 @@
     \fi
 }
 
+\newcommand{\est}[1]{\hat{#1}_m}
+\newcommand{\bias}[1]{\text{bias}\br{#1}}
 
 
 \newcommand{\arrow}{$\rightarrow\;$}
@@ -95,6 +98,7 @@
 \newcommand{\dkl}[2]{D_{\text{KL}}(#1\;\Vert\;#2)}
 \renewcommand{\S}{\mathbb{S}}
 \newcommand{\func}[3]{#1:#2\rightarrow#3}
+\newcommand{\p}[1]{p_\text{#1}}
 
 \begin{document}
 \section*{Probability}
@@ -325,7 +329,7 @@ Example: collection (usually vector) of features that has been measured, represe
     \item Regression: predict numerical value given some input: $\func{f}{\R^n}{R^m}$
     \item Structured output: output is vector with important relationships between elements e.g. output 
     token codes in language processing
-    \item Probability density estimation: explicitly learn function $\func{p_\text{model}}{\R^n}{\R}$ on space examples were drawn from \\
+    \item Probability density estimation: explicitly learn function $\func{\p{model}}{\R^n}{\R}$ on space examples were drawn from \\
     most above tasks already require implicit capture of structure of probability distribution
 \end{itemize}
 
@@ -357,7 +361,7 @@ to be able to estimate performance on test set without observing it make assumpt
     \item examples independent from each other
     \item training set and test set identically distributed
 \end{itemize}
-\arrow data generation can be described by distribution over single example $p_\text{data}(\v{x})$ \\
+\arrow data generation can be described by distribution over single example $\p{data}(\v{x})$ \\
 \\
 Terminology:\\
 Capacity: ability of model to fit function to be learned \\
@@ -365,6 +369,86 @@ Underfitting: model cannot obtain low enough training error, usually capacity to
 Overfitting: gap between training and generalization error too large, can be caused by too high capacity for task
 \arrow more parameters than examples or "memorization" of training data \\
 Best performance with capacity appropriate for true complexity of task and amount of training data \\
-Learning theory: upper bound for discrepancy between training and generalization error grows with capacity, shrinks with number of training examples
+Learning theory: upper bound for discrepancy between training and generalization error grows with capacity, shrinks with number of training examples \\
+\\
+Even ideal model knowing true probability distribution will have some error due to
+\begin{itemize}
+    \item Noise in distribution
+    \item mapping $\v{x} \rightarrow \v{y}$ may be stochastic (supervised learning)
+    \item $\v{y}$ may depend on other variables not included in $\v{x}$
+\end{itemize}
+\arrow Bayes error
 
+\subsubsection*{No Free Lunch Theorem}
+averaged over all possible data-generating distributions every classification algorithm has same error rate when classifying unobserved data \\
+\arrow no algorithm is universally any better than any other \\
+\arrow assumptions about data-generating distribution for specific task \arrow design learning algorithm that performs well on assumed distribution
+
+\subsubsection*{Hyperparameters and Validation Sets}
+Parameters that control algorithms behavior, which are not adapted by learning algorithm itself \\
+e.g. not appropriate to learn parameter on training set (e.g. model capacity, since algorithm would always overfit) \\
+\arrow Validation set separate from training and test set \\
+Reduce generalization error on validation set after training by optimizing hyperparameters \\
+Option to use all examples by cross-validation, e.g.: $k$-fold cross-validation:
+\begin{itemize}
+    \item split dataset into $k$ nonoverlapping subsets
+    \item on iteration $i$ use set $i$ as test set, rest as training set
+    \item average test error and training result across iterations
+\end{itemize}
+
+\subsubsection*{Estimators, Bias and Variance}
+\begin{flalign*}
+    & \text{Given i.i.d. data points} \set{x_1, \ldots, x_m}{} &&\\
+    & \text{Point estimator of parameter $\theta$:} \ \est{\theta} = g(x_1, \ldots, x_m) &&\\
+    & \rightarrow \ \text{Function estimator $\hat{f}$ = Point estimator in function space}&&\\
+    & \rightarrow \ \text{Estimators are functions over the random variables $x_i$} &&\\
+    & \text{Bias:} \ \bias{\est{\theta}} = \E[x\sim \p{data}]{\est{\theta}} - \theta &&\\
+    & \text{Variance:} \ \var{\est{\theta}} = \var[x_i\sim \p{data}]{\est{\theta}} &&\\
+    & \text{Mean Sqared Error:} \ \text{MSE}\left(\est{\theta}\right) = \E{\br{\est{\theta} - \theta}^2} = \bias{\est{\theta}}^2 + \var{\est{\theta}} &&\\
+    & \textbf{Common estimators}: &&\\
+    & \text{sample mean:} \ \est{\mu} := \frac{1}{m} \sum_{i=1}^{m} x_i &&\\
+    & \text{sample variance:} \ \est{\sigma}^2 := \frac{1}{m} \sum_{i=1}^{m} \br{x_i - \est{\mu}}^2 &&\\
+    & \text{unbiased sample variance:} \ \tilde{\sigma}^2_m := \frac{1}{m-1} \sum_{i=1}^{m} \br{x_i - \est{\mu}}^2 &&\\
+\end{flalign*}
+
+Bias measures expected deviation of estimator from true value \\
+Variance measures deviation from estimator value that sampling is likely to cause \\
+MSE measure overall expected deviation between estimator and true value \\
+When bias and variance meaningful components of generalization error, increasing capacity tends to increase variance and decrease bias
+
+\begin{flalign*}
+    \text{Consistency} \ :\iff \text{plim}_{m \to \infty} \est{\theta} = \theta \ \iff  P\br{\abs{\est{\theta}-\theta} > \epsilon} \to 0 \ \text{as} \ m \to \infty &&
+\end{flalign*}
+
+\subsubsection*{Maximum Likelihood Estimation}
+Given set of $m$ examples ${x_1, \ldots, x_m}$ drawn from data-generating distribution $\p{data}(x)$ \\
+$\p{model}(x; \theta)$ family of probability distributions over same space as $\p{data}(x)$, indexed by $\theta$ \\
+Maximum likelihood estimator for $\theta$ defined as:
+\begin{flalign*}
+    & \theta_{ML} := \argmax_\theta \p{model}(x_i; \theta) = \argmax_\theta \prod_{i=1}^{m} \p{model}(x_i; \theta) &&\\
+    \intertext{Redefine using monotonicity of log to avoid inconvenient product (e.g. underflow) and rescale with $1/m$:}
+    &\theta_{ML} := \argmax_\theta \frac{1}{m} \sum_{i=1}^{m} \log{\p{model}(x_i; \theta)} 
+    = \argmax_\theta \mathlarger{\int}\br{\frac{1}{m}\sum_{i=1}^{m} \delta\br{x - x_i}} \log{\p{model}(x; \theta)} \, dx
+    &&\\
+    & = \argmax_\theta \E[x\sim \hat{p}_\text{data}]{\log{\p{model}(x; \theta)}} = \argmin_\theta \E[x\sim \hat{p}_\text{data}]{-\log{\p{model}(x; \theta)}} &&\\
+    & \dkl{\hat{p}_\text{data}}{\p{model}} = \E[\hat{p}_\text{data}]{\log{\hat{p}_\text{data}}} - \E[\hat{p}_\text{data}]{\log{\p{model}}} &&
+\end{flalign*}
+$\implies \, \theta_{ML}$ minimizes dissimilarity between empirical distribution of training set $\hat{p}_\text{data}$ and model distribution $\p{model}$ by 
+minimization of KL divergence which corresponds to minimizing cross-entropy between distributions
+
+\subsubsection*{Conditional Log-Likelihood}
+Generalization of ML to learn conditional probability $\p{model}\c{y}{x; \theta}$ to predict $y$ given $x$ and i.i.d labeled examples $\br{y_i, x_i}$:
+\begin{flalign*}
+    \theta_{ML} = \argmax_\theta \prod_{i} \p{model}\c{y_i}{x_i; \theta} \rightarrow \theta_{ML} = \argmax_\theta \sum_{i} \log{\p{model}\c{y_i}{x_i; \theta}}
+\end{flalign*}
+\arrow $x_i$ are parameters in probability distribution, however not optimized since given in form of examples
+
+\subsubsection*{Properties of Maximum Likelihood}
+convergence (consistency) under conditions:
+\begin{itemize}
+    \item true distribution $\p{data}$ lies within model family $\p{model}(\cdot;\theta)$ \\
+    Otherwise no estimator can recover $\p{data}$
+    \item true distribution $\p{data}$ must correspond to exactly one value of $\theta$
+\end{itemize}
+It can be shown that for large $m$ no consistent estimator has lower MSE than ML estimator
 \end{document}
