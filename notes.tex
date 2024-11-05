@@ -7,9 +7,14 @@
 
 \setlength{\parindent}{0pt}
 
+\def\noval{}
+
 \DeclarePairedDelimiter{\br}{(}{)}
 \DeclarePairedDelimiter{\brr}{[}{]}
+\DeclarePairedDelimiter{\brs}{\{}{\}}
 \DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+
 
 \makeatletter
 \let\oldbr\br
@@ -22,8 +27,18 @@
 \makeatother
 
 \makeatletter
+\let\oldbrs\brs
+\def\brs{\@ifstar{\oldbrs}{\oldbrs*}}
+\makeatother
+
+\makeatletter
 \let\oldabs\abs
 \def\abs{\@ifstar{\oldabs}{\oldabs*}}
+\makeatother
+
+\makeatletter
+\let\oldnorm\norm
+\def\norm{\@ifstar{\oldnorm}{\oldnorm*}}
 \makeatother
 
 \makeatletter
@@ -33,28 +48,44 @@
 \def\@@log#1{\oldlog#1}
 \makeatother
 
-\def\noval{}
-\newcommand{\E}[2][\noval]{%
-    \ifx#1\noval%
+
+\makeatletter
+\newcommand{\set}[2]{
+    \def\@delim{\;\@ifstar{\middle|}{:}\;}
+    \ifx\noval#2\noval%
+        \left\{#1\right\}
+    \else
+        \left\{#1\@delim#2\right\}
+    \fi
+}
+\makeatother
+
+\newcommand{\E}[2][]{%
+    \ifx\noval#1\noval%
         \mathbb{E}\brr{#2}
     \else
         \mathbb{E}_{#1}\brr{#2}
     \fi
 }
-\newcommand{\var}[2][\noval]{%
-    \ifx#1\noval%
+\newcommand{\var}[2][]{%
+    \ifx\noval#1\noval%
         \text{Var}\br{#2}
     \else
         \text{Var}_{#1}\br{#2}
     \fi
 }
-\newcommand{\cov}[2][\noval]{%
-    \ifx#1\noval%
+\newcommand{\cov}[2][]{%
+    \ifx\noval#1\noval%
         \text{Cov}\br{#2}
     \else
         \text{Cov}_{#1}\br{#2}
     \fi
 }
+
+
+
+\newcommand{\arrow}{$\rightarrow\;$}
+
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\T}{\text{T}}
 \renewcommand{\v}{\bm}
@@ -62,6 +93,8 @@
 \renewcommand{\det}[1]{\text{det}\br{#1}}
 \newcommand{\ml}[1]{\mathlarger{#1}\,}
 \newcommand{\dkl}[2]{D_{\text{KL}}(#1\;\Vert\;#2)}
+\renewcommand{\S}{\mathbb{S}}
+\newcommand{\func}[3]{#1:#2\rightarrow#3}
 
 \begin{document}
 \section*{Probability}
@@ -219,7 +252,9 @@ Overflow: large numbers approximated to $\pm\infty$ $\rightarrow$ problem: NaN i
 Conditioning: how rapidly does function change for small variation in inputs $\rightarrow$ possibly large changes due to rounding error
 
 \subsubsection*{Gradent-Based Optimization}
-Problem in machine / deep learning: high-dimensional, often many local minima, saddle points surrounded by very flat regions
+Problem in machine / deep learning: \\
+functions high-dimensional, often many local minima, saddle points surrounded by very flat regions \\
+difficult to limit function space used
 \begin{flalign*}
     & \text{Jacobian} \ J_{i,j} := \frac{\partial f(\v{x})_i}{\partial x_j} && \\
     &\rightarrow \text{Jacobian of scalar function is transpose of its gradient}&&\\
@@ -242,11 +277,94 @@ Large differences in magnitude of Hessian eigenvalues ($\rightarrow$ curvature) 
     f(\v{x}) \approx f(\v{x}_0) + (\v{x} - \v{x}_0)^T \v{g} + \frac{1}{2} (\v{x} - \v{x}_0)^T \v{H} (\v{x} - \v{x}_0) &&
 \end{flalign*}
 can be used to estimate optimal step size $\epsilon^*$ for gradient descent step with $\v{x} = \v{x}_0 - \epsilon \v{g}$ \\
+\\
+Optimization algorithms using only gradient $\rightarrow$ first-order optimization algorithms, using Hessian second-order \\
+Convex optimization: most successful field of specialized optimization, problems in deep learning difficult to formulate as convex optimization, if at all only used in subroutines
 
+\subsubsection*{Constrained Optimization}
+Limit set of domain of optimization to set of feasible points $\S$ e.g. norm constraint\\
+Approaches:
+\begin{itemize}
+    \item modify gradient descent taking constraint into account (e.g. projection into $\S$)
+    \item design unconstrained problem whose solution can be converted into solution of original, e.g. for $\norm{\v{x}} \overset{!}{=} 1$ optimize $g(\theta) = f([\cos(\theta), \sin(\theta)]^T)$
+    \item Karush-Kuhn-Tucker (KKT) approach:
+    \begin{flalign*}
+       & \S := \set{\v{x}}{\forall i, g_i(\v{x})=0 \ \text{and} \ \forall j, h_j(\v{x}) \leq 0} &&\\
+       & L(\v{x}, \v{\lambda}. \v{\alpha}) := f(\v{x}) + \sum_{i} \lambda_i g_i(\v{x}) + \sum_j \alpha_j h_j(\v{x}) \qquad \text{(Generalized Lagrangian)} &&\\
+       & \text{Constrained minimization $\rightarrow$ unconstrained optimization of $L$:} \ \min_{\v{x}}  \max_{\v{\lambda}} \max_{\v{\alpha}, \alpha_j \geq 0} L(\v{x}, \v{\lambda}, \v{\alpha}) &&\\
+       & \text{Constraint violated} \implies \max_{\v{\lambda}} \max_{\v{\alpha}, \alpha_j \geq 0} L(\v{x}, \v{\lambda}, \v{\alpha}) = \infty &&\\
+       & \text{Constraints satisfied} \implies \max_{\v{\lambda}} \max_{\v{\alpha}, \alpha_j \geq 0} L(\v{x}, \v{\lambda}, \v{\alpha}) = f(\v{x}) \ \text{with} \ \forall j:  h_j(\v{x}) = 0 \ \text{or} \ \alpha_j = 0&& 
+    \end{flalign*}
+\end{itemize}
+\section*{Machine Learning Basics}
+\subsubsection*{Definitions}
 
+Broad definition of machine learning: "computer program is said to learn from experience [...] with respect to some class of tasks $T$ if its performance at tasks in $T$ [...] improves with experience" \\
+\\
+Form of representation of object is very important \\
+Pieces of information included in representation of object known as features \\
+e.g. Image - Representation: Array of Pixels, Features: Individual pixel values \\
+General machine learning: discover mapping from representation to output \\
+Representation learning: also learn the "optimal" representation of data \\
+Example of representation learning: Autoencoders \\
+Encoder function: converts data to different representation \\
+Decoder function: converts new representation back to original format \\
+Task: preserve as much information, while providing additional nice properties e.g. reduced size in new representation \\
+Deep learning tackles representation learning by introducing representations that are expressed in terms of other, simpler representations \\
+e.g. Image: Pixels \arrow Edges \arrow Contours \arrow Object parts \arrow Object identity \\
+\\
+Tasks usually described in terms of how system should process an example \\
+Example: collection (usually vector) of features that has been measured, representing object that system should process \\
+\\
 
-Optimization algorithms using only gradent $\rightarrow$ first-order optimization algorithms, using Hessian second-order
+\subsubsection*{Common tasks}
+\begin{itemize}
+    \item Classification of $k$ categories: produce function $\func{f}{\R^n}{R^k}$ \\
+    Output: probability vector $\norm{\v{y}} = 1$ (can also be one-hot)\\
+    Variation: missing inputs in $\v{x}$
+    \item Regression: predict numerical value given some input: $\func{f}{\R^n}{R^m}$
+    \item Structured output: output is vector with important relationships between elements e.g. output 
+    token codes in language processing
+    \item Probability density estimation: explicitly learn function $\func{p_\text{model}}{\R^n}{\R}$ on space examples were drawn from \\
+    most above tasks already require implicit capture of structure of probability distribution
+\end{itemize}
 
+\subsubsection*{Types of experience / learning}
+\begin{itemize}
+    \item Unsupervised: experience dataset, learning useful properties of dataset structure \\
+    e.g. probability density $p(\v{x})$ or clustering dataset
+    \item Supervised: experience dataset of labeled examples $\br{\v{x}, \v{y}}$, learn to estimate $p\c{\v{y}}{\v{x}}$
+    \item Semi-supervised: some examples have label/target, some not
+    \item Multi-instance: collection of examples labeled but not each example
+    \item Reinforcement: interaction with environment, feedback loop between system and experiences
+\end{itemize}
+Not formally defined terms, for example:
+\begin{flalign*}
+    &\text{Unsupervised problem can be split into supervised learning problems:} \ p(\v{x}) = \prod_{i} p\c{x_i}{x_1, \ldots, x_{i-1}} &&\\
+    &\text{Supervised learning of $p\c{\v{y}}{\v{x}}$ can be replaced by unsupervised learning of $p(\v{x}, \v{y})$ and using:} &&\\
+    & p\c{\v{y}}{\v{x}} = \frac{p(\v{x}, \v{y})}{\sum_{\v{y}} p(\v{x}, \v{y})}&&
+\end{flalign*}
 
+\subsubsection*{Capacity, Overfitting and Underfitting}
+Generalization: capacity to perform well on previously unseen inputs \\
+During learning: reduce training error \arrow error on training set \\
+Difference between machine learning and simple optimization:
+goal is also low generalization error \arrow expected error on new input \\
+Estimate generalization error with error on test set, set of examples not used for training \\
+\\
+to be able to estimate performance on test set without observing it make assumptions about data-generating process - i.i.d. assumptions:
+\begin{itemize}
+    \item examples independent from each other
+    \item training set and test set identically distributed
+\end{itemize}
+\arrow data generation can be described by distribution over single example $p_\text{data}(\v{x})$ \\
+\\
+Terminology:\\
+Capacity: ability of model to fit function to be learned \\
+Underfitting: model cannot obtain low enough training error, usually capacity too low \\
+Overfitting: gap between training and generalization error too large, can be caused by too high capacity for task
+\arrow more parameters than examples or "memorization" of training data \\
+Best performance with capacity appropriate for true complexity of task and amount of training data \\
+Learning theory: upper bound for discrepancy between training and generalization error grows with capacity, shrinks with number of training examples
 
 \end{document}
