@@ -450,5 +450,48 @@ convergence (consistency) under conditions:
     Otherwise no estimator can recover $\p{data}$
     \item true distribution $\p{data}$ must correspond to exactly one value of $\theta$
 \end{itemize}
-It can be shown that for large $m$ no consistent estimator has lower MSE than ML estimator
+It can be shown that for large $m$ no consistent estimator has lower MSE than ML estimator \\
+\arrow preferred estimator to use for machine learning
 \end{document}
+
+\subsubsection*{Support Vector Machines}
+%https://en.wikipedia.org/wiki/Support_vector_machine
+%% TODO
+goal: construct optimal hyperplane in high- or infinite-dimensional space, useful e.g. for classification \\
+classes often not linearly separable (i.e. by a plane) in original space \\
+solution \arrow kernel trick: map original space to much higher dimensional space, making solution easier in that space \\
+to optimize computation ensure that dot products of input data can be computed in terms of variables in original space \\
+define dot products in terms of kernel function $k(x,y)$
+
+\subsubsection*{Stochastic Gradient Descent}
+Extension of gradent descent, powers nearly all of deep learning \\
+Cost function often sum over training examples of per-example loss function \\
+\arrow Computational cost of gradient descent step is $O(m)$ \\
+SGD: gradient is itself an estimator, may be approximated using small set of samples ("minibatch") with fixed size $m^\prime$ \\
+Number of steps required to reach convergence usually increases with $m$, as $m \to \infty$ model will converge to best possible error before SGD has sampled every example
+\arrow Computational cost of SGD step is $O(1)$ as function of $m$
+
+\subsection*{Components of Machine Learning Algorithm}
+\begin{itemize}
+    \item specification of dataset
+    \item cost function $J$, most commonly negative log-likelihood (NLL) \\
+    \arrow minimizing causes maximum likelihood estimation
+    \item optimization procedure, often SGD
+    \item model specification $\p{model}$
+\end{itemize}
+
+\subsubsection*{Challenges Motivating Deep Learning}
+\begin{itemize}
+    \item Curse of Dimensionality: number of possible configurations gets much larger than number of examples, 
+    many traditional machine learning algorithms assume output should be approximately that of nearest training point \\
+    \arrow implicit assumption of smoothness $f(x) \approx f(x + \epsilon)$
+    \item Deep learning introduces additional (explicit and implicit) assumptions (priors) which can help to reduce generalization error
+    \item Manifold learning: assumption: most of $\R^n$ invalid inputs, interesting inputs / outputs only occur on collection of manifolds \\
+    Arguments for assumption in context of image, sound and text processing tasks:
+    \begin{itemize}
+        \item Probability distribution is highly concentrated, uniform noise essentially never resembles structured input
+        \item Similar examples connected to each other by applying transformations to traverse manifold (informal example of transformation in image space: 
+        gradually dim/brighten lights, rotate objects etc.)
+        \item multiple manifolds likely involved (e.g. manifold of human face imges, cat face images)
+    \end{itemize}
+\end{itemize}
