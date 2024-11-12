@@ -1,0 +1,186 @@
+\documentclass{article}
+\usepackage{mathtools}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{bm}
+\usepackage{relsize}
+
+\setlength{\parindent}{0pt}
+
+\def\noval{}
+
+\DeclarePairedDelimiter{\br}{(}{)}
+\DeclarePairedDelimiter{\brr}{[}{]}
+\DeclarePairedDelimiter{\brs}{\{}{\}}
+\DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\makeatletter
+\let\oldbr\br
+\def\br{\@ifstar{\oldbr}{\oldbr*}}
+\makeatother
+
+\makeatletter
+\let\oldbrr\brr
+\def\brr{\@ifstar{\oldbrr}{\oldbrr*}}
+\makeatother
+
+\makeatletter
+\let\oldbrs\brs
+\def\brs{\@ifstar{\oldbrs}{\oldbrs*}}
+\makeatother
+
+\makeatletter
+\let\oldabs\abs
+\def\abs{\@ifstar{\oldabs}{\oldabs*}}
+\makeatother
+
+\makeatletter
+\let\oldnorm\norm
+\def\norm{\@ifstar{\oldnorm}{\oldnorm*}}
+\makeatother
+
+\makeatletter
+\let\oldlog\log
+\def\log{\@ifstar\@log\@@log}
+\def\@log#1{\oldlog\br{#1}}
+\def\@@log#1{\oldlog#1}
+\makeatother
+
+
+\makeatletter
+\newcommand{\set}[2]{
+    \def\@delim{\;\@ifstar{\middle|}{:}\;}
+    \ifx\noval#2\noval%
+        \left\{#1\right\}
+    \else
+        \left\{#1\@delim#2\right\}
+    \fi
+}
+\makeatother
+
+\newcommand{\E}[2][]{%
+    \ifx\noval#1\noval%
+        \mathbb{E}\brr{#2}
+    \else
+        \mathbb{E}_{#1}\brr{#2}
+    \fi
+}
+\newcommand{\var}[2][]{%
+    \ifx\noval#1\noval%
+        \text{Var}\br{#2}
+    \else
+        \text{Var}_{#1}\br{#2}
+    \fi
+}
+\newcommand{\cov}[2][]{%
+    \ifx\noval#1\noval%
+        \text{Cov}\br{#2}
+    \else
+        \text{Cov}_{#1}\br{#2}
+    \fi
+}
+
+\newcommand{\est}[1]{\hat{#1}_m}
+\newcommand{\bias}[1]{\text{bias}\br{#1}}
+
+
+\newcommand{\arrow}{$\rightarrow\;$}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\text{T}}
+\renewcommand{\v}{\bm}
+\renewcommand{\c}[2]{\left(#1\;\middle|\;#2\right)}
+\renewcommand{\det}[1]{\text{det}\br{#1}}
+\newcommand{\ml}[1]{\mathlarger{#1}\,}
+\newcommand{\dkl}[2]{D_{\text{KL}}(#1\;\Vert\;#2)}
+\renewcommand{\S}{\mathbb{S}}
+\newcommand{\func}[3]{#1:#2\rightarrow#3}
+\newcommand{\p}[1]{p_\text{#1}}
+
+\begin{document}
+\section{Definitions}
+\subsection{Definition of Machine Learning}
+Broad definition of machine learning: \\
+“A computer program is said to learn from experience E
+ with respect to some class of tasks T [...] 
+ if its performance at tasks in T [...] 
+ improves with experience E.”
+
+Generally, we want learn some function
+\begin{flalign*}
+    \func{f}{\R^n}{\R^m}, \, f(x) = y
+\end{flalign*}
+of high complexity
+
+\subsection{Types of tasks}
+Different classes of tasks T require different kinds of functions, \\
+Common tasks are:
+\begin{itemize}
+    \item Classification of $k$ categories: produce function $\func{f}{\R^n}{R^k}$ \\
+    Output: probability vector $\norm{\v{y}} = 1$ (can also be one-hot)\\
+    Variation: missing inputs in $\v{x}$
+    \item Regression: predict numerical value given some input: $\func{f}{\R^n}{R^m}$
+    \item Structured output: output is vector with important relationships between elements e.g. output 
+    token codes in language processing
+    \item Probability density estimation: explicitly learn function $\func{\p{model}}{\R^n}{\R}$ on space examples were drawn from \\
+    most above tasks already require implicit capture of structure of probability distribution
+\end{itemize}
+
+\subsection{Types of learning}
+Algorithm usually learns / gains experience E by observing examples \\
+Tasks usually described in terms of how system should process an example \\
+Types of learning can roughly be divided into:
+\begin{itemize}
+    \item Unsupervised: experience dataset of examples $x_i$, learning useful properties of dataset structure \\
+    e.g. probability density $p(\v{x})$ or clustering dataset
+    \item Supervised: experience dataset of labeled examples $\br{\v{x}_i, \v{y}_i}$, learn to estimate $p\c{\v{y}}{\v{x}}$
+    \item Semi-supervised: some examples have label/target, some not
+    \item Multi-instance: collection of examples labeled but not each example
+    \item Reinforcement: interaction with environment, feedback loop between system and experiences
+\end{itemize}
+
+\subsection{What is learned?}
+Form of representation of object that should be processed is very important \\
+Pieces of information included in representation of object known as features \\
+e.g. Image - Representation: Array of Pixels, Features: Individual pixel values \\
+
+General machine learning: discover mapping from representation to output \\
+Example: logistic regression: learn parameters $\beta_0, \beta_1$ such that
+\begin{flalign*}
+    f(x) = \frac{1}{1+\exp(-\beta_0 -\beta_1 x)}
+\end{flalign*}
+best fits given data\\
+%https://en.wikipedia.org/wiki/Logistic_regression
+
+Representation learning: also learn the "optimal" representation of data \\
+Example of representation learning: Autoencoders \\
+Encoder function: converts data to different representation \\
+Decoder function: converts new representation back to original format \\
+Task: preserve as much information, while providing additional nice properties e.g. reduced size in new representation \\
+
+Deep learning tackles representation learning by introducing representations that are expressed in terms of other, simpler representations \\
+e.g. Image: Pixels \arrow Edges \arrow Contours \arrow Object parts \arrow Object identity \\
+
+
+Machine Learning Basics
+1. Empirical Distribution, KL Divergence, Cross-Entropy
+2. Estimators
+3. Cost/Objective Functions
+4. Maximum Likelihood Estimation
+5. Stochastic Gradient Descent
+
+Deep Learning
+1. Challenges Motivating Deep Learning
+2. Definition of Deep Learning
+3. Deep Feedforward Networks
+    1. Hidden Units
+    2. Back-Propagation
+    3. Model Design
+4. Regularization
+5. Optimization Algorithms
+6. Convolutional Neural Networks
+7. Neuroevolution?
+\end{document}
