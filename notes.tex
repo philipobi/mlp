@@ -452,7 +452,7 @@ convergence (consistency) under conditions:
 \end{itemize}
 It can be shown that for large $m$ no consistent estimator has lower MSE than ML estimator \\
 \arrow preferred estimator to use for machine learning
-\end{document}
+
 
 \subsubsection*{Support Vector Machines}
 %https://en.wikipedia.org/wiki/Support_vector_machine
@@ -495,3 +495,46 @@ Number of steps required to reach convergence usually increases with $m$, as $m 
         \item multiple manifolds likely involved (e.g. manifold of human face imges, cat face images)
     \end{itemize}
 \end{itemize}
+
+\section*{Deep Feedforward Networks}
+\subsubsection*{Definitions}
+also called multilayer perceptrons (MLP) \\
+quentessential deep learning model \\
+goal: learn best value of parameters $\theta$ such that $f(x; \theta)$ is best approximation of some function $f^*(x)$ \\
+no feedback connections where ouptut fed back into model (recurrent neural networks) \\
+network aspect: can be described by directed acycylic graph of function compositions \\
+most commonly chain $f(x) = f^{(3)}(f^{(2)}(f^{(1)}(x)))$ where $f^{(i)}$ called $i$-th layer of network \\
+length of chain \arrow depth of model \arrow origin of term "deep learning" \\
+examples $(y_i, x_i)$ where $f^*(x_i) \simeq y_i$ specify what output $f(x_i; \theta)$ should produce \\
+training data does not show desired output for intermediate layers \arrow "hidden layers" \\
+hidden layers typically vector valued, dimensionality determines width of model \\
+"neural" networks because architecture loosely inpired by neuroscience \\
+vector elements play role analogous to neuron, can be seen as unit that receives input from many 
+other units and computes own activation value \\
+choice of function used for computation of activation value also loosely guided by biological neurons \\
+goal is not to model brain, modern research guided by mathematical and engineering disciplines \\
+feedforward networks: "function approximation machines designed to achieve statistical generalization, ocassionally drawing
+some insight from what we know about the brain , rather than models of brain function" %p.164
+
+%maybe: derivation from kernel trick
+\subsubsection*{Gradient-Based Learning}
+Nonlinearity of function useful property, otherwise e.g. XOR cannot be learned \\
+causes most loss function to become nonconvex \arrow training using iterative, gradient-based optimizers 
+that drive cost function to low value \arrow no convergence guarantees, sensitive to initial parameters \\
+forps MLPs: initialize weights to small random values, biases to zero or small positive values \\
+training algorithm almost always based on sgd or improvements of sgd
+
+
+\subsubsection*{Cost Functions}
+in most cases parametric model defines $p\c{y}{x; \theta}$ and use principle of maximum likelihood \\
+\arrow use cross-entropy/NLL between training data and model predictions as cost function:
+\begin{flalign*}
+    J(\theta) = - \E[x,y\sim \hat{p_\text{data}}]{\log{\p{model}\c{y}{x}}} &&
+\end{flalign*}
+\arrow specifying model $p\c{y}{x}$ automatically determines cost function $\log{p\c{y}{x}}$ \\
+gradient of cost function must be large and predictable enough to serve as good guide for learning algorithm \\
+problematic for activation functions that saturate (become very flat)
+
+%ADAM: exponentially weighted average https://stats.stackexchange.com/a/286644
+
+\end{document}
