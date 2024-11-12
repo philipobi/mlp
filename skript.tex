@@ -104,12 +104,12 @@
 \section{Definitions}
 \subsection{Definition of Machine Learning}
 Broad definition of machine learning: \\
-“A computer program is said to learn from experience E
- with respect to some class of tasks T [...] 
- if its performance at tasks in T [...] 
- improves with experience E.”
+“A computer program is said to learn from experience E 
+with respect to some class of tasks T and performance measure P, 
+if its performance at tasks in T, as measured by P, improves with
+experience E.”
 
-Generally, we want learn some function
+Generally, we want to learn some function
 \begin{flalign*}
     \func{f}{\R^n}{\R^m}, \, f(x) = y
 \end{flalign*}
@@ -126,7 +126,7 @@ Common tasks are:
     \item Structured output: output is vector with important relationships between elements e.g. output 
     token codes in language processing
     \item Probability density estimation: explicitly learn function $\func{\p{model}}{\R^n}{\R}$ on space examples were drawn from \\
-    most above tasks already require implicit capture of structure of probability distribution
+    most above tasks already require implicit capture of structure/parameters of underlying probability distribution
 \end{itemize}
 
 \subsection{Types of learning}
@@ -143,6 +143,7 @@ Types of learning can roughly be divided into:
 \end{itemize}
 
 \subsection{What is learned?}
+%image: venn diagram
 Form of representation of object that should be processed is very important \\
 Pieces of information included in representation of object known as features \\
 e.g. Image - Representation: Array of Pixels, Features: Individual pixel values \\
@@ -163,15 +164,122 @@ Task: preserve as much information, while providing additional nice properties e
 
 Deep learning tackles representation learning by introducing representations that are expressed in terms of other, simpler representations \\
 e.g. Image: Pixels \arrow Edges \arrow Contours \arrow Object parts \arrow Object identity \\
+Quintessential Example of Deep Learning: Multilayer Perceptron (\arrow later)
+%image: representations for image MLP
+
+\subsection{Performance Measure P}
+Often difficult to find performance measure that corresponds well to desired behavior of 
+system and is suitable for optimization
+\begin{itemize}
+    \item transcription: how do we value sentences that are not fully correct but close
+    \item density estimation: can be impossible to explicitly compute probability for specific points in space
+\end{itemize}
+
+Generally we would like to have a function which we can optimize to improve
+performance of algorithm on previously unseen data \arrow Loss / Objective / Cost / Error function (mostly synonymous), $J(\theta)$
+with $\theta$ model parameters\\
+\\
+
+\subsection{Types of Error}
+Difference between Machine Learning and simple optimization: we do not only want low error on examples (training error) but also on 
+previously unseen data (generalization error) \\
+Capacity: ability of model to fit function to be learned \\
+Underfitting: model cannot obtain low enough training error, usually capacity too low \\
+Overfitting: gap between training and generalization error too large, can be caused by too high capacity for task
+\arrow more parameters than examples or "memorization" of training data \\
+Best performance with capacity appropriate for true complexity of task and amount of training data \\
+%image training, generalization error, capacity
+
+To estimate generalization error, split examples in training set and test set, use only training set for learning \\
+To be able to make estimations, have to make i.i.d. assumptions about data generating process:
+\begin{itemize}
+    \item individual examples independent from each other
+    \item training set and test set identically distributed
+\end{itemize}
+\arrow data generation can be described by distribution over single example $\p{data}(\v{x})$ \\
+
+\section{Machine Learning Basics}
+\subsection{Statistics, Information Theory}
+\subsubsection*{Empirical distribution}
+Puts probability mass $\frac{1}{m}$ on each of the $m$ observed samples $\v{x}_i$
+\begin{flalign*}
+    \hat{p}(\v{x}) = \frac{1}{m} \sum_{i=1}^{m} \delta(\v{x} - \v{x}_i) &&
+\end{flalign*}
+
+\subsubsection*{Information content}
+Desired properties of information measure:
+\begin{itemize}
+    \item Information content of event should depend on its likelihood (low/high likelihood $\leftrightarrow$ high/low information)
+    \item Independent events should have additive information: e.g. $I(2\times \text{Heads}) \overset{!}{=} 2\cdot I(\text{Heads})$
+\end{itemize}
+
+Define self-information of event $X=x$ as:
+\begin{flalign*}
+    I(X=x) := -\log{p(X=x)} && 
+\end{flalign*}
+
+\subsubsection*{Shannon entropy}
+Quantification of uncertainty in probability distribution:
+\begin{flalign*}
+    H(X) := \E[X \sim p]{I(x)} &&
+\end{flalign*}
+\arrow Expectation value of self-information
+
+\subsubsection*{Kullback-Leibler (KL) divergence}
+Measure of how different distributions $P(X)$ and $Q(X)$ over same variable $X$ are:
+\begin{flalign*}
+    \dkl{P}{Q} := \E[X \sim P]{\log{\frac{P(x)}{Q(x)}}} &&
+\end{flalign*}
+Properties:\\
+$\dkl{P}{Q} \geq 0, \ \dkl{P}{Q} = 0 \iff P(X) = Q(X)$ \\ 
+$\rightarrow$ concept of distance between distributions, however not symmetric so it makes difference which divergence is minimized \\
+%image: difference between D_KL(P,Q) and D_KL(Q,P)
+
+\subsubsection*{Cross-Entropy}
+\begin{flalign*}
+    H(P,Q) = -\E[X\sim p]{\log{Q(x)}} &&
+\end{flalign*}
+Minimizing cross-entropy with respect to $Q$ equivalent to minimizing KL divergence, since variation of $Q$ does not affect omitted term
+
+\subsection{Maximum Likelihood Estimator}
+Estimator: \\
+Given i.i.d. data points $\mathbb{X} = \set{x_1, \ldots, x_m}{}$ drawn from data-generating distribution $\p{data}(x)$\\
+Point estimator of some parameter $\theta$: $\ \est{\theta} = g(x_1, \ldots, x_m)$ \\ 
+\\
+$\p{model}(x; \theta)$ family of probability distributions over same space as $\p{data}(x)$, indexed by $\theta$ \\
+Maximum likelihood estimator for $\theta$ defined as:
+\begin{flalign*}
+    & \theta_{ML} := \argmax_\theta \p{model}(x_i; \theta) = \argmax_\theta \prod_{i=1}^{m} \p{model}(x_i; \theta) &&\\
+    \intertext{Redefine using monotonicity of log to avoid inconvenient product (e.g. underflow) and rescale with $1/m$:}
+    &\theta_{ML} := \argmax_\theta \frac{1}{m} \sum_{i=1}^{m} \log{\p{model}(x_i; \theta)} 
+    = \argmax_\theta \mathlarger{\int}\br{\frac{1}{m}\sum_{i=1}^{m} \delta\br{x - x_i}} \log{\p{model}(x; \theta)} \, dx
+    &&\\
+    & = \argmax_\theta \E[x\sim \hat{p}_\text{data}]{\log{\p{model}(x; \theta)}} = \argmin_\theta \E[x\sim \hat{p}_\text{data}]{-\log{\p{model}(x; \theta)}} &&\\
+    & \dkl{\hat{p}_\text{data}}{\p{model}} = \E[\hat{p}_\text{data}]{\log{\hat{p}_\text{data}}} - \E[\hat{p}_\text{data}]{\log{\p{model}}} &&
+\end{flalign*}
+
+Properties
+\begin{itemize}
+    \item minimization of KL divergence which corresponds to minimizing cross-entropy between distributions \\
+    minimizes dissimilarity between empirical distribution of training set $\hat{p}_\text{data}$ and model distribution $\p{model}$ by 
+    \item It can also be shown that:
+    \item if there exists $\theta$ such that $\p{data}(x) = \p{model}(x;\theta)$ then $\theta_{ML}$ converges to that parameter for $m \to \infty$ (\arrow consistency)
+    \item for given large $m$, no other consistent estimator has lower Mean Squared Error
+    \begin{flalign*}
+        \text{MSE}\left(\est{\theta}\right) = \E[x\sim p_\text{data}]{\br{\est{\theta} - \theta}^2}
+    \end{flalign*} 
+    than ML (\arrow statistical efficiency, Cramer-Rao lower bound)
+\end{itemize}
+\arrow preferred estimator to use for machine learning
 
 
-Machine Learning Basics
+\end{document}
+
 1. Empirical Distribution, KL Divergence, Cross-Entropy
 2. Estimators
-3. Cost/Objective Functions
 4. Maximum Likelihood Estimation
 5. Stochastic Gradient Descent
-
+Underfitting / Overfitting 
 Deep Learning
 1. Challenges Motivating Deep Learning
 2. Definition of Deep Learning
@@ -183,4 +291,3 @@ Deep Learning
 5. Optimization Algorithms
 6. Convolutional Neural Networks
 7. Neuroevolution?
-\end{document}
