@@ -271,6 +271,10 @@ class MultinoulliML:
         np.log(Y_[self.index_, Y], out=self.loss_)
         return -np.sum(self.loss_)
 
+    @property
+    def error_rate(self):
+        Y_, Y = self
+
 
 class MLPConfig:
     layers = []
