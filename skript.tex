@@ -249,28 +249,43 @@ Point estimator of some parameter $\theta$: $\ \est{\theta} = g(x_1, \ldots, x_m
 $\p{model}(x; \theta)$ family of probability distributions over same space as $\p{data}(x)$, indexed by $\theta$ \\
 Maximum likelihood estimator for $\theta$ defined as:
 \begin{flalign*}
-    & \theta_{ML} := \argmax_\theta \p{model}(x_i; \theta) = \argmax_\theta \prod_{i=1}^{m} \p{model}(x_i; \theta) &&\\
-    \intertext{Redefine using monotonicity of log to avoid inconvenient product (e.g. underflow) and rescale with $1/m$:}
-    &\theta_{ML} := \argmax_\theta \frac{1}{m} \sum_{i=1}^{m} \log{\p{model}(x_i; \theta)} 
-    = \argmax_\theta \mathlarger{\int}\br{\frac{1}{m}\sum_{i=1}^{m} \delta\br{x - x_i}} \log{\p{model}(x; \theta)} \, dx
-    &&\\
-    & = \argmax_\theta \E[x\sim \hat{p}_\text{data}]{\log{\p{model}(x; \theta)}} = \argmin_\theta \E[x\sim \hat{p}_\text{data}]{-\log{\p{model}(x; \theta)}} &&\\
-    & \dkl{\hat{p}_\text{data}}{\p{model}} = \E[\hat{p}_\text{data}]{\log{\hat{p}_\text{data}}} - \E[\hat{p}_\text{data}]{\log{\p{model}}} &&
+    & \theta^{(ML)}_{m} := \argmax_\theta \prod_{i=1}^{m} \p{model}(x_i; \theta) &&\\
+    \intertext{Since argmax, we can redefine using monotonicity of log to avoid inconvenient product (e.g. underflow) and rescale with $1/m$:}
+    & \theta^{(ML)}_{m} := \argmax_\theta \frac{1}{m} \sum_{i=1}^{m} \log{\p{model}(x_i; \theta)} = \argmin_\theta \frac{1}{m} \sum_{i=1}^{m} - \log{\p{model}(x_i; \theta)} \quad (*)&&\\
+    &= \argmin_\theta \mathlarger{\int}\br{\frac{1}{m}\sum_{i=1}^{m} \delta\br{x - x_i}} \br{-\log{\p{model}(x; \theta)}} \, dx &&\\
+    & = \argmin_\theta \E[x\sim \hat{p}_\text{data}]{-\log{\p{model}(x; \theta)}} &&\\
+    & = \argmin_\theta H(\hat{p}_\text{data}, \p{model}(\theta))
+    &&&\\
+    & \dkl{\hat{p}_\text{data}}{\p{model}(\theta)} = \E[x\sim \hat{p}_\text{data}]{\log{\hat{p}_\text{data}(x)}} +  H(\hat{p}_\text{data}, \p{model}(\theta))&&\\
 \end{flalign*}
 
-Properties
+preferred estimator to use for machine learning because of nice properties:
 \begin{itemize}
-    \item minimization of KL divergence which corresponds to minimizing cross-entropy between distributions \\
-    minimizes dissimilarity between empirical distribution of training set $\hat{p}_\text{data}$ and model distribution $\p{model}$ by 
+    \item $\theta^{(ML)}_{m}$ is set of parameters which minimizes cross-entropy / KL divergence (\arrow dissimilarity) between observed distribution of $m$ examples and model distribution
     \item It can also be shown that:
-    \item if there exists $\theta$ such that $\p{data}(x) = \p{model}(x;\theta)$ then $\theta_{ML}$ converges to that parameter for $m \to \infty$ (\arrow consistency)
+    \item if there exists $\theta$ such that $\p{data}(x) = \p{model}(x;\theta)$ then $\theta^{(ML)}_{m}$ converges to that parameter for $m \to \infty$ (\arrow consistency)
     \item for given large $m$, no other consistent estimator has lower Mean Squared Error
     \begin{flalign*}
         \text{MSE}\left(\est{\theta}\right) = \E[x\sim p_\text{data}]{\br{\est{\theta} - \theta}^2}
     \end{flalign*} 
-    than ML (\arrow statistical efficiency, Cramer-Rao lower bound)
+    than ML (\arrow Cramer-Rao lower bound, high statistical efficiency)
+    \item provides a "natural" way of defining cost / loss function
 \end{itemize}
-\arrow preferred estimator to use for machine learning
+
+ML loss function:
+\begin{flalign*}
+    &(*) \implies \theta^{(ML)}_{m} := \argmin_\theta \frac{1}{m} \sum_{i=1}^{m} - \log{\p{model}(x_i; \theta)} =: \argmin_\theta J(x_1, \ldots, x_m; \theta)&&\\
+    & J(x_1, \ldots, x_m; \theta) = \frac{1}{m} \sum_{i=1}^{m} L()&&\\
+\end{flalign*}
+
+\subsection{Stochastic Gradient Descent}
+Mostly our cost function will depend on examples, e.g. const function defined by ML-Estimator: $J(x_1, \ldots, x_m; \theta)$ \\
+To minimize cost function we usually use some form of gradient descent, simplest form:
+\begin{flalign*}
+    \theta_{k+1} \, \leftarrow \, \theta_k - \epsilon \nabla_\theta J(x_1, \ldots, x_m; \theta)
+\end{flalign*}
+This works because the gradient of $J$ with respect to $\theta$ points in the direction, in which $J$ increases the most
+
 
 
 \end{document}
