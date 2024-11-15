@@ -99,6 +99,7 @@
 \renewcommand{\S}{\mathbb{S}}
 \newcommand{\func}[3]{#1:#2\rightarrow#3}
 \newcommand{\p}[1]{p_\text{#1}}
+\renewcommand{\k}[2]{#1^{(#2)}}
 
 \begin{document}
 \section{Definitions}
@@ -139,7 +140,8 @@ Types of learning can roughly be divided into:
     \item Supervised: experience dataset of labeled examples $\br{\v{x}_i, \v{y}_i}$, learn to estimate $p\c{\v{y}}{\v{x}}$
     \item Semi-supervised: some examples have label/target, some not
     \item Multi-instance: collection of examples labeled but not each example
-    \item Reinforcement: interaction with environment, feedback loop between system and experiences
+    \item Reinforcement: interaction with environment, feedback loop between s
+    ystem and experiences
 \end{itemize}
 
 \subsection{What is learned?}
@@ -322,7 +324,6 @@ Examples: \\
     capacity, resulting in overfitting
 \end{itemize}
 
-
 \section{Deep Learning}
 \subsection{Challenges Motivating Deep Learning}
 \begin{itemize}
@@ -331,18 +332,64 @@ Examples: \\
     \arrow implicit assumption of smoothness $f(x) \approx f(x + \epsilon)$
     \item Deep learning introduces additional (explicit and implicit) assumptions which can help to reduce generalization error (e.g. concept of receptive field for CNNs)
     \item Idea / Intuition: with Deep Learning we can split complex tasks into subtasks that build on one another and progressively have more and more abstraction
+\end{itemize}
     
 \subsection{Definition of Deep Learning, Neural Networks}
+%graph deep network
 Network:\\
 Neural networks typically formed by composition of many different functions \\
-Can be represented by directed acyclic graph (no loops, direction of data flow is defined) \\
+Can be represented by directed graph (direction of data flow is defined) \\
 \arrow network of nodes \\
-%graph image chain structure
-Typically: chain structure, where overall length of chain called "depth" \arrow origin of term "\textbf{Deep} Learning" \\
 \textbf{Neural} Networks: \\
 architecture loosely inpired by neuroscience \\
-layers generally vector-valued components of vector can be seen as interconnected unit playing role analogous to neuron 
+interconnected graph nodes playing role analogous to neuron \\
+similar to neuron we speak of activation of node: numerical value that the node passes on to following nodes \arrow also  \\
+"depth" of graph \arrow origin of term "\textbf{Deep} Learning"  \\
+Neural networks and deep learning algorithms are subset of machine learning algorithms with added property of network character and depth
 
+\subsection{Deep Feedforward Networks}
+\subsubsection*{Definition}
+also known as multilayer perceptrons (MLPs) \\
+quintessential deep learning models \\
+feedforward: data only flows in one direction, no loops in graph \\
+typically have chain structure with vector valued functions:
+% typical mlp graph with nodes=vector components
+\begin{flalign*}
+    y = f(x) = f^{(3)}(f^{(2)}(f^{(1)}(x)))
+\end{flalign*}
+we call the individual $f^{(i)}$s layers, with final layer called output layer, intermediate layers hidden layers \\
+hidden layer: training examples $(x_i, y_i)$ do not explicitly specify what the intermediate layers should do, it is up to the deep learning algorithm to learn what to do in these layers
+
+\subsubsection*{Hidden Units}
+Typically the functions $f^{(k)}$ forming hidden layers layer are an affine vector-transformation combined with a nonlinear activation function:
+\begin{flalign*}
+    & z^{(k)}_i = W_{ij} a^{(k-1)}_j + b^{(k)}_i, \quad a^{(k)}_i = g^{(k)}(z^{(k)}_i) &&\\
+    & f^{(k)}(a^{(k-1)}) = g(W^{(k)} a^{(k-1)} + b^{(k)}) &&\\
+    & a^{(k)}: \ \text{activation vector} &&\\
+    & g^{(k)}: \ \text{nonlinear activation function (generally element-wise)} &&\\
+    & W^{(k)}: \ \text{weight matrix} &&\\
+    & b^{(k)}: \ \text{bias vector} &&\\
+\end{flalign*}
+ 
+\subsubsection*{Intuition/Reason for use of Nonlinear Activation Functions}
+\begin{itemize}
+    \item We need some way of breaking linearity, without activation functions:
+    \begin{flalign*}
+        f(x) = f^{(3)}(f^{(2)}(f^{(1)}(x))) = \k{W}{3} \k{W}{2} \k{W}{1} x + c
+    \end{flalign*}
+    with $c$ collection of layer biases \\
+    \arrow affine transformation again \\
+    since affine transformations preserve affine subspaces, if we cannot separate a set of points by a hyperplane in our original space, we wont be able to separate them by a hyperplane after transformation \\
+    \arrow simple example this is problematic: we cannot learn XOR without nonlinear activation function: 
+    %XOR image
+    \item Make it possible to capture repeating patterns: \\
+    A layer using an affine transformation with the activation function $g(z_i) = \abs{z_i}$ essentially defines a hyperplane, along which space is folded \\
+    Composition of such layers in deep network folds the input space many times, then finally using a simple function on the folded space results in complex symmetrical pattern on the original space
+    %folding image 
+    \item Loose analogy to biology: real neurons dont have negative activations, most popular activation function rectified linear units (ReLU) simply "cuts" the negative activation: \\
+    \begin{flalign*}
+        \text{ReLU}(z_i) := \max(0, z_i)
+    \end{flalign*}
 \end{itemize}
 
 
