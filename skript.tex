@@ -275,17 +275,75 @@ preferred estimator to use for machine learning because of nice properties:
 ML loss function:
 \begin{flalign*}
     &(*) \implies \theta^{(ML)}_{m} := \argmin_\theta \frac{1}{m} \sum_{i=1}^{m} - \log{\p{model}(x_i; \theta)} =: \argmin_\theta J(x_1, \ldots, x_m; \theta)&&\\
-    & J(x_1, \ldots, x_m; \theta) = \frac{1}{m} \sum_{i=1}^{m} L()&&\\
+    & J_m(\theta) := J(x_1, \ldots, x_m; \theta) = \frac{1}{m} \sum_{i=1}^{m} L(x; \theta)&&
 \end{flalign*}
+with $L$: per-example loss \\
+this type of loss-function: cross-entropy loss / log loss \\
+We can generalize to conditional probabilities which appear in supervised learning:
+\begin{flalign*}
+    \theta^{(ML)}_{m} := \argmin_\theta \frac{1}{m} \sum_{i=1}^{m} - \log{\p{model}\c{x_i}{y_i; \theta}} =: \argmin_\theta J(x_1, y_1, \ldots, x_m, y_m; \theta)
+\end{flalign*}
+
 
 \subsection{Stochastic Gradient Descent}
-Mostly our cost function will depend on examples, e.g. const function defined by ML-Estimator: $J(x_1, \ldots, x_m; \theta)$ \\
+Mostly our cost function will depend on examples, e.g. const function defined by ML-Estimator \\
 To minimize cost function we usually use some form of gradient descent, simplest form:
 \begin{flalign*}
-    \theta_{k+1} \, \leftarrow \, \theta_k - \epsilon \nabla_\theta J(x_1, \ldots, x_m; \theta)
+    \theta_{k+1} \, \leftarrow \, \theta_k - \epsilon \nabla_\theta J_m(\theta)
 \end{flalign*}
 This works because the gradient of $J$ with respect to $\theta$ points in the direction, in which $J$ increases the most
+step size $\epsilon$ is also called the learning rate
 
+\begin{flalign*}
+    \nabla_\theta J_m(\theta) = \frac{1}{m} \sum_{i=1}^{m} \nabla_\theta L(x_i, y_i; \theta) = \E[x,y \sim \hat{p}_\text{data}]{\nabla_\theta L(x, y; \theta)}
+\end{flalign*}
+Normally we will would to include as many examples as possible, i.e. $m$ large such that:
+\begin{flalign*}
+    \argmin_\theta J_m(\theta) = \theta^{(ML)}_{m} \approx \theta^* &&
+\end{flalign*}
+But that causes calculating the gradient to have cost $O(m)$, which makes each gradient step prohibitively long for large training sets \\
+
+We see however that the gradient $\nabla_\theta J_m(\theta)$ is an expectation, and we can define an estimator for the gradient:
+\begin{flalign*}
+    g := \frac{1}{m^\prime} \sum_{i=1}^{m^\prime} \nabla_theta L(x_i, y_i; \theta)
+\end{flalign*}
+where $m^\prime \ll M$ and possibly constant and the set of examples used for the estimators is called a minibatch \\
+for each step, randomly sample minibatch of examples from test set and compute gradient estimate with those examples \\
+with regard to training set size this can be viewed as reducing the computational cost to $O(1)$ \\
+minibatch size typically chosen ranges from 1 to few hundred examples
+
+\subsection{Hyperparameters}
+Parameters that control the algorithms behavior, however they are not adapted by learning algorithm itself \\
+Reasons: parameter difficult to optimize, not appropriate to learn on training set \\
+Examples: \\
+\begin{itemize}
+    \item Learning rate
+    \item All parameters that control model capacity \\ \arrow optimization of these parameters on training set would maximize
+    capacity, resulting in overfitting
+\end{itemize}
+
+
+\section{Deep Learning}
+\subsection{Challenges Motivating Deep Learning}
+\begin{itemize}
+    \item Curse of Dimensionality: number of possible configurations gets much larger than number of examples, 
+    many traditional machine learning algorithms assume output should be approximately that of nearest training point (smoothness prior)\\
+    \arrow implicit assumption of smoothness $f(x) \approx f(x + \epsilon)$
+    \item Deep learning introduces additional (explicit and implicit) assumptions which can help to reduce generalization error (e.g. concept of receptive field for CNNs)
+    \item Idea / Intuition: with Deep Learning we can split complex tasks into subtasks that build on one another and progressively have more and more abstraction
+    
+\subsection{Definition of Deep Learning, Neural Networks}
+Network:\\
+Neural networks typically formed by composition of many different functions \\
+Can be represented by directed acyclic graph (no loops, direction of data flow is defined) \\
+\arrow network of nodes \\
+%graph image chain structure
+Typically: chain structure, where overall length of chain called "depth" \arrow origin of term "\textbf{Deep} Learning" \\
+\textbf{Neural} Networks: \\
+architecture loosely inpired by neuroscience \\
+layers generally vector-valued components of vector can be seen as interconnected unit playing role analogous to neuron 
+
+\end{itemize}
 
 
 \end{document}
