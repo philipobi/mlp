@@ -325,6 +325,7 @@ Examples: \\
 \end{itemize}
 
 \section{Deep Learning}
+
 \subsection{Challenges Motivating Deep Learning}
 \begin{itemize}
     \item Curse of Dimensionality: number of possible configurations gets much larger than number of examples, 
@@ -386,13 +387,81 @@ Typically the functions $f^{(k)}$ forming hidden layers layer are an affine vect
     A layer using an affine transformation with the activation function $g(z_i) = \abs{z_i}$ essentially defines a hyperplane, along which space is folded \\
     Composition of such layers in deep network folds the input space many times, then finally using a simple function on the folded space results in complex symmetrical pattern on the original space
     %folding image 
-    \item Loose analogy to biology: real neurons dont have negative activations, most popular activation function rectified linear units (ReLU) simply "cuts" the negative activation: \\
+    \item Loose analogy to biology: real neurons dont have negative activations, most popular activation function rectified linear units (ReLU) simply "cuts" the negative activation:
     \begin{flalign*}
         \text{ReLU}(z_i) := \max(0, z_i)
     \end{flalign*}
+    \item Formal justification for use of activation functions: universal approximation theorems
 \end{itemize}
 
+\subsubsection*{Universal Approximation Theorems}
+prove that functions can be approximated with any desired nonzero amount of error by MLPs with certain activation functions and enough hidden units \\
+specifically there also exists a universal approximation theorem for MLPs using the popular ReLU activation function\\
+however the theorem only guarantees that functions can be represented, not that they can be learned \\
+This ties into another theorem:
 
+\subsection*{No Free Lunch Theorem}
+Statement:\\
+there is no universally superior machine learning algorithm\\
+averaged over all possible data-generating distributions, every algorithm will perform equally bad \\
+\arrow understand what data-generating distributions might be relevant to the individual problem and choose machine learning algorithm that performs well for these kinds of distributions
+
+\subsection*{Output Units}
+The final layer of a network with $m$ layers should produce the desired output of our algorithm \\
+In the maximum likelihood approach we usually see
+\begin{flalign*}
+    \k{z}{m} = \k{W}{m} \k{a}{m-1} + \k{b}{m}
+\end{flalign*}
+as a parameter, controlling our model distribution $\p{model}$\\
+\\
+Gaussian Output:\\
+For example, if we want to learn the distribution $p\c{y}{x}$, and our model distribution is a normal distribution (with identity covariance matrix), we would see $\k{z}{m}$ the as the mean:
+\begin{flalign*}
+    & \hat{y}(x) := \k{z}{m} &&\\
+    & \p{model}\c{y}{x} = \mathcal{N}(y; \hat{y}(x), \mathbb{I}) \propto \exp\br{-\frac{1}{2}\br{y-\hat{y}(x)}^2} &&
+\end{flalign*}
+\\
+Bernoulli Output: \\
+If we have a classification problem with two classes $y \in \set{0, 1}{}$, we use a Bernoulli-Distribution and let $\k{W}{m}$ be a matrix with only one row:
+\begin{flalign*}
+    \p{model}\c{y=1}{x} + \p{model}\c{y=0}{x} \overset{!}{=} 1
+\end{flalign*}
+Define unnormalized distribution and normalize it:
+\begin{flalign*}
+    &z(x) := \k{z}{m} &&\\
+    &\tilde{P}\c{y}{x} := \exp(yz(x)) &&\\
+    &\implies \p{model}\c{y}{x} := \frac{\tilde{P}\c{y}{x}}{\sum_{y^\prime = 0}^{1} \tilde{P}\c{y^\prime}{x}} 
+    = \frac{\exp(yz(x))}{1+\exp(z(x))}
+    =\sigma((2y - 1)z(x))&&\\
+    &\text{with sigmoid function:} \ \sigma(x) := \frac{1}{1+ \exp(-x)} = \frac{\exp(x)}{1 + \exp(x)}&&\\ 
+\end{flalign*}
+
+\subsection*{Components of a Deep Learning Algorithm}
+Nearly all deep learning algorithms can be broken down into the following components:
+\begin{itemize}
+    \item Specification of a dataset
+    \item Model (model distribution $\p{model}$, computation procedure $f(x)$)
+    \item Cost function
+    \item Optimization procedure
+\end{itemize}
+By now, we have all the tools / knowledge needed define the first three components for a real world example: handwriting recognition on mnist dataset
+\subsection{Architecture of simple MLP for MNIST Dataset}
+\subsubsection*{Dataset}
+\begin{itemize}
+    \item $\approx$ 40000 labeled examples $(x_i, y_i)$
+    \item $x_i$: 28x28 grayscale pixel vector
+    \item $y_i$: digit the image represents / contains (0-9)
+\end{itemize}
+
+\subsubsection*{Model}
+We want to output a vector $y(x)$ with $y_i(x) = \p{model}\c{i}{x} , i \in \set{0, \ldots, 9}{}$ representing the possibility of the image depicting integer $i$ \\
+\arrow $\p{model}$ should be a Multinoulli distribution:
+\begin{flalign*}
+    & 0 \overset{!}{\leq} \p{model}\c{i}{x} \overset{!}{\leq} 1 &&\\
+    & \sum_{i=0}^{9} \p{model}\c{i}{x} \overset{!}{=} 1 &&
+\end{flalign*}
+
+Once again, define unnormalized distribution and normalize:
 \end{document}
 
 1. Empirical Distribution, KL Divergence, Cross-Entropy
