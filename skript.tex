@@ -4,6 +4,7 @@
 \usepackage{amsfonts}
 \usepackage{bm}
 \usepackage{relsize}
+\usepackage{float}
 
 \setlength{\parindent}{0pt}
 
@@ -365,7 +366,7 @@ hidden layer: training examples $(x_i, y_i)$ do not explicitly specify what the 
 Typically the functions $f^{(k)}$ forming hidden layers layer are an affine vector-transformation combined with a nonlinear activation function:
 \begin{flalign*}
     & z^{(k)}_i = W_{ij} a^{(k-1)}_j + b^{(k)}_i, \quad a^{(k)}_i = g^{(k)}(z^{(k)}_i) &&\\
-    & f^{(k)}(a^{(k-1)}) = g(W^{(k)} a^{(k-1)} + b^{(k)}) &&\\
+    & f^{(k)}(a^{(k-1)}) = \k{g}{k}(W^{(k)} a^{(k-1)} + b^{(k)}) &&\\
     & a^{(k)}: \ \text{activation vector} &&\\
     & g^{(k)}: \ \text{nonlinear activation function (generally element-wise)} &&\\
     & W^{(k)}: \ \text{weight matrix} &&\\
@@ -429,8 +430,8 @@ If we have a classification problem with two classes $y \in \set{0, 1}{}$, we us
 Define unnormalized distribution and normalize it:
 \begin{flalign*}
     &z(x) := \k{z}{m} &&\\
-    &\tilde{P}\c{y}{x} := \exp(yz(x)) &&\\
-    &\implies \p{model}\c{y}{x} := \frac{\tilde{P}\c{y}{x}}{\sum_{y^\prime = 0}^{1} \tilde{P}\c{y^\prime}{x}} 
+    &\tilde{p}\c{y}{x} := \exp(yz(x)) &&\\
+    &\implies \p{model}\c{y}{x} := \frac{\tilde{p}\c{y}{x}}{\sum_{y^\prime = 0}^{1} \tilde{p}\c{y^\prime}{x}} 
     = \frac{\exp(yz(x))}{1+\exp(z(x))}
     =\sigma((2y - 1)z(x))&&\\
     &\text{with sigmoid function:} \ \sigma(x) := \frac{1}{1+ \exp(-x)} = \frac{\exp(x)}{1 + \exp(x)}&&\\ 
@@ -448,20 +449,162 @@ By now, we have all the tools / knowledge needed define the first three componen
 \subsection{Architecture of simple MLP for MNIST Dataset}
 \subsubsection*{Dataset}
 \begin{itemize}
-    \item $\approx$ 40000 labeled examples $(x_i, y_i)$
-    \item $x_i$: 28x28 grayscale pixel vector
-    \item $y_i$: digit the image represents / contains (0-9)
+    \item $\approx$ 40000 labeled examples $(x_k, y_k)$
+    \item $x_k$: 28x28 grayscale pixel vector
+    \item $y_k$: digit the image represents / contains (0-9)
 \end{itemize}
 
 \subsubsection*{Model}
-We want to output a vector $y(x)$ with $y_i(x) = \p{model}\c{i}{x} , i \in \set{0, \ldots, 9}{}$ representing the possibility of the image depicting integer $i$ \\
+We want to output a vector $p(x)$ with $p_i = \p{model}\c{y = i}{x} , i \in \set{0, \ldots, 9}{}$ representing the possibility of the image depicting integer $i$ \\
 \arrow $\p{model}$ should be a Multinoulli distribution:
 \begin{flalign*}
-    & 0 \overset{!}{\leq} \p{model}\c{i}{x} \overset{!}{\leq} 1 &&\\
-    & \sum_{i=0}^{9} \p{model}\c{i}{x} \overset{!}{=} 1 &&
+    & 0 \leq \p{model}\c{y = i}{x} \leq 1 &&\\
+    & \sum_{i=0}^{9} \p{model}\c{y = i}{x} = 1 &&
 \end{flalign*}
 
 Once again, define unnormalized distribution and normalize:
+\begin{flalign*}
+    & z(x) := \k{z}{m} = \k{W}{m} \k{a}{m-1} + \k{b}{m}&&\\
+    & \tilde{p}\c{y = i}{x} := \exp(z_i(x)) &&\\
+    & \implies \p{model}\c{y = i}{x} = \frac{\tilde{p}\c{y=i}{x}}{\sum_{j=0}^{9}\tilde{p}\c{y=j}{x}} = \frac{\exp(z_i(x))}{\sum_{j=0}^{9}\exp(z_j(x))} =: \text{softmax}(z(x))_i &&\\
+    & \iff p(x) = \text{softmax}(z(x)) &&\\
+\end{flalign*}
+
+Without any particular reason, choose network to have two hidden layers with 16 width each, using ReLU activation \\
+\\
+Overview of the network:
+\begin{table}[H]
+    \begin{tabular}{|l|l|l|l|l|}
+    \hline
+    Layer type              & Input         & Hidden    & Hidden    & Output  \\
+    \hline
+    Layer width                   & $28 \times 28 = 784$ & $16$      & $16$      & 
+    $10$      \\
+    \hline
+    $\k{W}{k}$ shape & -             & $(16, 784)$      & $(16,16)$      & $(10, 16)$ \\
+    \hline
+    $\k{b}{k}$ shape & -             & $(16, 1)$      & $(16,1)$      & $(10, 1)$ \\
+    \hline
+    Activation $\k{g}{k}$ & -             & ReLU      & ReLU      & Softmax \\
+    \hline
+    $k$                     & $0$           & $1$       & $2$       & $3$       \\
+    \hline
+    \end{tabular}
+\end{table}
+Essentially, we see the computation of $p$ in the output layer with softmax as just another type of activation function \\
+We can describe the algorithm for propagating the input through the network like so:
+\begin{flalign*}
+    & \k{a}{0} = x &&\\
+    & \text{for} \quad k = 1, \ldots, m = 3 &&\\
+    & \qquad \k{z}{k} = \k{W}{k} \k{a}{k-1} + \k{b}{k} &&\\
+    & \qquad \k{a}{k} = \k{g}{k}(\k{z}{k}) &&\\
+    & p = \k{a}{m} &&
+\end{flalign*}
+
+\subsubsection*{Cost function}
+Since model uses maximum likelihood approach, cost function and per example loss are automatically defined:
+\begin{flalign*}
+    & L(x_k, y_k; \theta) = - \log{\p{model}\c{y = y_k}{x_k; \theta}} = -\log*{\text{softmax}(z(x_k))_{y_k}}&&\\
+    &J(\theta) = \frac{1}{m} \sum_{k=1}^{m} L(x_k, y_k; \theta)&&
+\end{flalign*}
+Where $\theta$ describes the set of all learnable parameters of the model i.e. the $\k{W}{k}_{ij}$ and $\k{b}{k}_i$
+
+\section{Optimization}
+How can we minimize cost functions of this type?
+\subsection{Back-Propagation}
+\subsubsection*{General Formulation of Back-Propagation on Graphs}
+%image of general dag
+Partial derivative of value of one graph node $\k{u}{n}$ with respect to another $\k{u}{j}$ can be computed by recursively applying the chain rule:
+\begin{flalign*}
+    \frac{\partial\k{u}{n}}{\partial\k{u}{j}} 
+    = \mathlarger{\sum}_{i \ : \ \k{u}{j} \in Pa(\k{u}{i})} 
+    \frac{\partial\k{u}{n}}{\partial\k{u}{i}} \frac{\partial\k{u}{i}}{\partial\k{u}{j}}
+\end{flalign*}
+where $Pa(\k{u}{i})$ is the set of all nodes $\k{u}{j}$ such that there is an edge going from $\k{u}{j}$ to $\k{u}{i}$ \\
+This essentially collects the derivatives along all possible paths from $\k{u}{j}$ to $\k{u}{n}$ \\
+If we have many such derivatives to compute, that is many different $\k{u}{j}$, we can avoid having to use recursion by starting at $\k{u}{n}$ and storing the $\frac{\partial\k{u}{n}}{\partial\k{u}{i}}$ along the way, so that they can be reused
+
+For this to work, it is important for the graph to be directed, so that we know how nodes influence one another
+Also, graph shouldnt have any cycles/loops, otherwise, a node would be able to influence itself
+\arrow directed, acyclic graphs (DAGs)
+
+\subsection*{Application of Back-Propagation to Simple Feedforward Networks}
+In the case of our neural network, the algorithm can be simplified a lot, since we are mainly dealing with matrix-vector and component-wise operations \\
+We are interested in $\nabla_\theta J(\theta)$, or equivalently $\nabla_\theta L(x,y; \theta) \ \iff \ \frac{\partial L}{\partial \k{W}{k}_{ij}}, \frac{\partial L}{\partial \k{b}{k}_i}$ \\
+To compute these, store the following intermediate values:
+\begin{flalign*}
+    & k = m : \quad \frac{\partial L}{\partial \k{z}{k}_i} &&\\
+    & 1 \leq k < m : \quad 
+    \frac{\partial L}{\partial \k{z}{k}_j} 
+    = \frac{\partial L}{\partial \k{z}{k+1}_i} \frac{\partial \k{z}{k+1}_i}{\partial \k{z}{k}_j} 
+    = \frac{\partial L}{\partial \k{z}{k+1}_i} \frac{\partial}{\partial \k{z}{k}_j} \br{\k{W}{k+1}_{ip} \k{g}{k}(\k{z}{k})_p + \k{b}{k}_i} &&\\
+    & \text{component-wise activation for hidden layers} &&\\ 
+    &\implies \, \frac{\partial L}{\partial \k{z}{k}_j} = \frac{\partial \k{g}{k}(\k{z}{k}_j)}{\k{z}{k}_j} {\k{W}{k+1}}^T_{ji} \frac{\partial L}{\partial \k{z}{k+1}_i}  &&\\
+\end{flalign*}
+The intermediate values can then be used as such:
+\begin{flalign*}
+    & \frac{\partial L}{\partial \k{W}{k}_{ij}} 
+    = \frac{\partial L}{\partial \k{z}{k}_n} \frac{\partial \k{z}{k}_n}{\partial \k{W}{k}_{ij}}
+    = \frac{\partial L}{\partial \k{z}{k}_n} \frac{\partial}{\partial \k{W}{k}_{ij}} \br{\k{W}{k}_{np} \k{a}{k-1}_p + \k{b}{k}_n}
+    = \frac{\partial L}{\partial \k{z}{k}_i} \k{a}{k-1}_j
+    &&\\
+    & \frac{\partial L}{\partial \k{b}{k}_i}
+    = \frac{\partial L}{\partial \k{z}{k}_n} \frac{\partial \k{z}{k}_n}{\partial \k{b}{k}_i}
+    = \frac{\partial L}{\partial \k{z}{k}_n} \frac{\partial}{\partial \k{b}{k}_i} \br{\k{W}{k}_{np} \k{a}{k-1}_p + \k{b}{k}_n}
+    = \frac{\partial L}{\partial \k{z}{k}_i} &&\\
+    &\text{where} \ 1 \leq k \leq m&&
+\end{flalign*}
+For ReLU, return one-sided derivative at $x=0$, non-formal justification: due to numerical error, our true value probably anyway was not zero for $x=0$
+\begin{flalign*}
+    \frac{\partial}{\partial x} \text{ReLU}(x) = \begin{cases*}
+        0 & for $x \leq 0$ \\
+        1 & for $x > 0 $
+    \end{cases*}
+\end{flalign*}
+
+Computation of $\frac{\partial L}{\partial \k{z}{m}_i}$ for the MNIST-Model:\\
+\begin{flalign*}
+    & z(x_k) := \k{z}{m} \quad \text{to avoid index-chaos}&&\\
+    & L(x_k, y_k; \theta) = - \log{\text{softmax}(z(x_k))_{y_k}} = \log{\sum_{j}\exp\br{z_j(x_k)}} - z_{y_k}(x_k)&&\\
+    & \implies \frac{\partial L}{\partial \k{z}{m}_i} = \frac{\exp(z_i(x_k))}{\sum_{j}\exp(z_j(x_k))} - \delta_{i y_k} = \text{softmax}(z(x_k))_i - \delta_{i y_k} &&\\
+\end{flalign*}
+with these components, we can now compute the gradient estimate for a minibatch of size $m^\prime$:
+\begin{flalign*}
+    & \nabla_\theta = \frac{1}{m^\prime} \sum_{k=1}^{m^\prime} \nabla_\theta L(x_k, y_k; \theta) &&
+\end{flalign*}
+
+Softmax can become numerically unstable for large $\abs{z_i}$ or large differences between the $z_i$: \\
+overflow: absolute value so large, gets rounded to $\pm\infty$ \\
+overflow: absolute value so small, gets rounded to $0$ \\
+Examples where this occurs:
+\begin{itemize}
+    \item $\sum_{j} \exp{z_j}$ can overflow or underflow for large $\abs{z_i}$
+    \item $\frac{\exp(z_i)}{\sum_{j}\exp(z_j)}$ can underflow for large differences between the $z_j$ or many large $z_j$
+\end{itemize}
+
+Solution:\\
+Due to factoring of exp
+\begin{flalign*}
+    & \text{softmax}(z) = \text{softmax}(\tilde{z}) \ \text{where} \ \tilde{z}_i := z_i - \max_j(z_j) &&
+\end{flalign*}
+This guarantees at least one zero in $\tilde{z}$ and otherwise only negative entries \\
+\arrow at least one 1 in the sum, otherwise only values $< 1$ \\
+This can help to fix:
+\begin{itemize}
+    \item overflow and underflow of the sum term
+    \item underflow of entire sum if many large $z_j$
+\end{itemize}
+
+\section{Optimization Algorithms}
+\subsection{Momentum}
+\subsection{ADAM}
+
+\section{Regularization}
+\subsection{Early Stopping}
+\subsection{Parameter Projection}
+\subsection{Dropout}
+
+\section{Convolutional Neural Networks}
 \end{document}
 
 1. Empirical Distribution, KL Divergence, Cross-Entropy
