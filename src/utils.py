@@ -50,11 +50,15 @@ class Softmax(Activation):
 
 
 class Adam:
-    def __init__(self, eps=0.001, r1=0.9, r2=0.999, d=1e-8):
+    def __init__(
+        self, eps=0.001, r1=0.9, r2=0.999, d=1e-8, clip_threshold=6, clip_stepsize=1
+    ):
         self.eps = eps
         self.r1 = r1
         self.r2 = r2
         self.d = d
+        self.clip_threshold = clip_threshold
+        self.clip_stepsize = clip_stepsize
 
     def init_training(self, layers):
         self.t = 0
@@ -71,9 +75,36 @@ class Adam:
             rb_ = np.empty_like(layer.b)
             self.data.append((layer, (sW, sW_, rW, rW_), (sb, sb_, rb, rb_)))
 
+    @property
+    def _gradient_norm(self):
+        nrm2 = 0
+        for layer, _, _ in self.data:
+            nrm2 += np.square(np.linalg.norm(layer.dJdW))
+            nrm2 += np.square(np.linalg.norm(layer.dJdb))
+        return np.sqrt(nrm2)
+
+    def _scale_gradients(self, r):
+        for layer, _, _ in self.data:
+            np.multiply(layer.dJdW, r, out=layer.dJdW)
+            np.multiply(layer.dJdb, r, out=layer.dJdb)
+
+    def _clip_gradients(self):
+        nrm = self._gradient_norm
+        if np.isinf(nrm) or np.isnan(nrm):
+            for layer, _, _ in self.data:
+                layer.dJdW = np.random.rand(*layer.dJdW.shape) - 0.5
+                layer.dJdb = np.random.rand(*layer.dJdb.shape) - 0.5
+            self._scale_gradients(self.clip_stepsize / self._gradient_norm)
+        elif nrm > self.clip_threshold:
+            self._scale_gradients(self.clip_stepsize / nrm)
+
     def update_params(self):
         self.t += 1
         r1, r2, t = (self.r1, self.r2, self.t)
+
+        if self.clip_threshold is not None:
+            self._clip_gradients()
+
         for layer, W_, b_ in self.data:
             for (s, s_, r, r_), g, p in (
                 (W_, layer.dJdW, layer.W),
@@ -95,5 +126,4 @@ class Adam:
                 np.add(r, self.d, out=r)
                 np.multiply(s, -self.eps, out=s)
                 np.divide(s, r, out=s)
-
                 np.add(p, s, out=p)
