@@ -596,30 +596,220 @@ This can help to fix:
 \end{itemize}
 
 \section{Optimization Algorithms}
+Algorithms for minimizing objective functions $J(\theta)$
+\subsection{Stochastic Gradient Descent}
+Basis of most used optimization algorithms for machine learning \\
+\begin{flalign*}
+    \theta_{k+1} = \theta_k - \epsilon g
+\end{flalign*}
+use minibatch to estimate $g \approx \nabla_\theta J(\theta)$ \\
+Some problems of this simple algorithm:
+\begin{itemize}
+    \item $J(\theta)$ for neural networks with many layers often have extremly steep regions with large gradients
+    \begin{itemize}
+        \item gradient can overflow
+        \item fixed-size learning rate $\epsilon$ can cause us to overshoot region of low cost
+    \end{itemize}
+    \arrow possible solution: clip gradient if larger than specified value
+    \item use of minibatches corresponds to random sampling from $\hat{p}_\text{data}$, this introduces source of noise \\
+    \arrow gradient usually doesnt become zero, even at minimum \\
+    this cannot be solved simply by gradient clipping
+\end{itemize}
+two adaptations of SGD to better deal with this sort of issue:
 \subsection{Momentum}
-\subsection{ADAM}
+method designed to accelerate learning, especially for cases of high curvature, noisy or small but consistent gradients
+\begin{flalign*}
+    & v_k = \alpha v_{k-1} - \epsilon g(\theta_{k-1}) &&\\
+    & \theta_k = \theta_{k-1} + v_k &&\\
+    & k = 1, 2, 3,  \ldots&&
+\end{flalign*}
+with $\alpha \in [0,1)$ and initial velocity $v_0$\\
+Physical analogy: moving particle with friction, velocity $v = p$ (unit mass) is exponentially decaying average of the gradient $g$
+%image: comparison path graident descent, momentum
+
+\subsection{Adam}
+derived from phrase "adaptive moments"
+moment-based optimization algorithm with adaptive learning rate
+\begin{flalign*}
+    \intertext{Compute Moment Estimates:}
+    & s_k = \rho_1 s_{k-1} + (1-\rho_1)g(\theta_{k-1}) &&\\
+    & r_k = \rho_2 r_{k-1} + (1-\rho_2)g(\theta_{k-1}) \odot g(\theta_{k-1}) &&\\
+    \intertext{Bias Correction}
+    & \hat{s}_{k} = \frac{s_k}{1-\rho_1^k} &&\\
+    & \hat{r}_{k} = \frac{r_k}{1-\rho_2^k} &&\\
+    & \Delta\theta_k = - \epsilon \frac{\hat{s_k}}{\sqrt{\hat{r}_k} + \delta} \quad \text{element-wise}&&\\
+    & \theta_k = \theta_{k-1} + \Delta \theta_k &&\\
+    &k = 1,2,3, \ldots&&\\
+    &\rho_1, \rho_2 \in [0,1)&&\\
+    &\delta \text{Small constant for numerical stabilization}&&
+\end{flalign*}
+
+
+first moment $s$: mean of gradient (exponentially weighted) \\
+second moment $r$: measure for variance of gradient, but uncentered, i.e. not distance from mean (exponentially weighted) \\
+essentially, we divide the average gradient through a measure of how strong the gradient varies, which stabilizes it \\
+
+%https://en.wikipedia.org/wiki/Moment_(mathematics)
+formal definition of moments:
+$n$-th moment centered around $c$, ($c=0 \iff$ uncentered):
+\begin{flalign*}
+    &\mu_n = \int (x-c)^n p(x) \, dx&&
+\end{flalign*}
+
+%exponential weighting: https://stats.stackexchange.com/a/286644
+
+%https://en.wikipedia.org/wiki/Stochastic_gradient_descent
+Most popular modern machine learning optimizers are based on Adam \\
+e.g. TensorFlow and PyTorch as of 2023 almost only include Adam-derived optimizers
 
 \section{Regularization}
-\subsection{Early Stopping}
-\subsection{Parameter Projection}
+Strategies to improve generalization of machine learning algorithms
+\subsection{Parameter Norm Constraints}
+avoid overfitting and limit capacity of model by introducing a parameter norm penalty $\Omega(\theta)$ \\
+typically, for neural networks penalize only weights, bias only control single variable, weight requires observing both variables it connects in variety of conditions, penalizing bias can lead to underfitting \\
+\\
+strategies:
+\begin{itemize}
+    \item Implicit constraint: \\
+    Minimize regularized objective function:
+    \begin{flalign*}
+        &\tilde{J}(\theta) = J(\theta) + \alpha \Omega(\theta), \quad \alpha \geq 0&&
+    \end{flalign*}
+    implicit in sense that we cannot explicitly specify the constraint region
+    \item Explicit constraint: \\
+    Perform gradient step with $\nabla_\theta J(\theta)$ and project $\theta$ back in constraint region specified by e.g. $\Omega(\theta) < c$ if step left this region \\
+    advantage: stabilizing effect, avoids positive feedback loop of large $\theta$ \arrow large gradient step which can lead to exploding $\theta$
+\end{itemize}
+
+\subsection{Dataset augmentation}
+best way to improve generalization is more training data \\
+sometimes possible to generate new training data by transforming existing examples:
+e.g. slightly translate, scale or rotate example images \\
+\arrow trains network to be invariant to certain translations \\
+injecting small amount of random noise into input can also be seen as augmentation
+
 \subsection{Dropout}
+% dropout image
+trains an ensemble of networks, consisting of all subnetworks that can be formed by removing nonoutput node from underlying base network \\
+in feedforward networks based on matrix-vector operations and nonlinear activation function this can be done by simply multiplying value of removed node by zero during feedforward \\
+for each example in minibatch, randomly sample binary mask, apply to input and hidden units \\
+possibility to sample value 1 (\arrow leave node active) typically 0.8 for input, 0.5 for hidden node \\
+run back-propagation as usual \\
+when predicting output for new input, output is mean of all outputs in ensemble (\arrow members of ensemble "vote" on what the output should be) \\
+can be computationally infeasible due to exponential number of subnetworks in ensemble \\
+it was experimentally shown that computing this mean is equivalent to scaling outgoing weights for a node by the probability that it is included and use the base network with scaled weights to make the prediction \\
+motivation: capture right expected value of output from that node\\
+\\
+intuition behind this approach:
+\begin{itemize}
+    \item can be seen as form of dataset augmentation, constructing new inputs by multiplying by noise
+    \item trains nodes to perform well regardless of other hidden units in model, regularizes each hidden node to work well in many different contexts
+\end{itemize}
+has been shown to be more effective than other standard computationally inexpensive regularizers, e.g. weight penalties \\
+can be combined with other forms of regularization for further improvement
+
+\subsection{Early Stopping}
+%overfitting graph
+When training large models, training error decreases steadily, generalization error starts increasing again after certain amount of time \arrow model starts to overfit \\
+idea: stop training at lowest point of in generalization error as estimated by set of examples that is not used for training \\
+since test set is defined as set, that does not influence any model decisions at all, we call this set of examples the validation set \\
+algorithm:
+\begin{itemize}
+    \item keep separate set of parameters, $\theta_{min}$ for which the validation set error was minimal so far
+    \item run training algorithm for $n$ steps
+    \item if current validation set error lower than previous minimum, copy current parameters $\theta_{min} \leftarrow \theta_k$
+    \item if validation set error larger than minimum $p$ (for patience) times in a row, exit and return $\theta_{min}$
+\end{itemize}
+
+Probably most commonly used form of regularization in deep learning, due to effectiveness and simplicity
 
 \section{Convolutional Neural Networks}
-\end{document}
+specialized kind of neural network for processing data that has known grid-like topology, e.g. images
+\subsection{The Convolution Operation}
+General:
+\begin{flalign*}
+    (f \ast g)(t) := \int f(\tau)g(t - \tau)d\tau = \int f(t - \tau)g(\tau)d\tau
+\end{flalign*}
 
-1. Empirical Distribution, KL Divergence, Cross-Entropy
-2. Estimators
-4. Maximum Likelihood Estimation
-5. Stochastic Gradient Descent
-Underfitting / Overfitting 
-Deep Learning
-1. Challenges Motivating Deep Learning
-2. Definition of Deep Learning
-3. Deep Feedforward Networks
-    1. Hidden Units
-    2. Back-Propagation
-    3. Model Design
-4. Regularization
-5. Optimization Algorithms
-6. Convolutional Neural Networks
-7. Neuroevolution?
+In our case we have real-valued functions defined on 2D grid indices $\in \mathbb{Z}^2$, so for convenience, we define our convolution operation (which is actually a cross-correlation) as:
+
+
+
+The functions in our case are real-valued and represent the data of finite-sized 2D arrays. They are therefore defined to have finite support on $\mathbb{Z}^2$:
+\begin{flalign*}
+    & A(i,j) = \begin{cases*}
+        A[i,j] & for $(i,j) \in {0, \ldots , m-1}\times{0, \ldots, n-1}$\\
+        0 & otherwise
+    \end{cases*}&&
+\end{flalign*}
+where $A$ is an array of shape $(m, n)$
+
+For convenience, we define this to be our convolution operation (which is formally a cross-correlation):
+\begin{flalign*}
+    & F(i,j) = \sum_{m=-\infty}^{\infty}\sum_{n=-\infty}^{\infty} I(i+m, j+n)K(m,n) &&\\
+    \intertext{if $K$ has shape $(k,l)$:}
+    & F(i,j) = \sum_{m=0}^{k-1}\sum_{n=0}^{l-1} I(i+m, j+n)K(m,n) &&
+\end{flalign*}
+$F$: output/feature map, $I$: input, $K$: kernel
+%convolution example
+
+%full, valid, same convolution?
+
+\subsection{Architecture of a convolutional layer}
+\begin{enumerate}
+    \item Convolutions with several $n$ kernels/filters in parallel produce $n$ feature maps
+    \item Application of (element-wise) activation function to each feature map
+    \item Pooling
+\end{enumerate}
+\subsubsection*{Pooling}
+pooling function is applied to activations \\
+aggregtes/summarizes nearby outputs \\
+e.g. max pooling reports maximum activation within rectangular neighborhood
+
+\subsection{Motivations}
+\subsection*{Pooling}
+Introduction of invariance \\
+for some features, we only care if it is present or not \\
+% image max pooling
+e.g. max pooling (width 3), shifting input to the right only causes half of the pooled values to change \arrow invariance to small translations \\
+
+% image feature pooling
+pooling outputs of different kernels/filters can introduce more invariance, e.g. if pooling over filters that detect different orientations of object
+
+\subsection*{Downsampling}
+% image pooling with strides
+pooling with strides: \\
+pooling summarizes responses over neighborhood, using a stride size $> 1$ can help reduce representation size\\
+\\
+%image convolution with strides
+strided convolution: \\
+skip over kernel positions to reduce computational cost, equivalent to downsampling output of full convolution function
+\begin{flalign*}
+    & F(i,j) = \sum_{m}\sum_{n} I(i\cdot s + m, j\cdot s + n) K(m,n) &&
+\end{flalign*}
+with stride size $s$\\
+\\
+Downsampling is essential for handling inputs of variable size, e.g. different image sizes \\
+MLPs used for classifying the information extracted by the convolution layers require fixed size input\\
+This is usually done by varying the stride size such that an output of the expected size is produced
+
+\subsubsection*{Sparse Connectivity}
+Not all input nodes are connected to all output nodes for kernels smaller than input
+\begin{itemize}
+    \item Can lead to dramatic reduction in computational requirements (storage of parameters, arithmetic operations), especially for large input arrays (e.g. large images)
+    \item Meaningful features can also be detected with kernels small compared to entire array size (e.g. edges in pictures)
+\end{itemize}
+
+\subsubsection*{Parameter sharing}
+Kernel parameters are reused for each output node, compared to MLP where each node has its own weights (row in layer weight matrix matrix)
+\begin{itemize}
+    \item layer has equivariance to translation, i.e. translating the input in certain direction also causes translation of output in same direction \\
+    \arrow useful for feature detection, e.g. it makes sense to reuse the same parameters to detect an edge regardless of position in an image
+\end{itemize}
+
+\subsection*{Neuroscientific basis}
+Research shows that primary visual cortex in mammals is arranged in spatial map \\
+has two-dimensional structure, mirroring structure of image in retina \\
+these and other findings inspired CNNs and they are perhaps one of the greatest success stories of biologically inspired artificial intelligence
+
+\end{document}
