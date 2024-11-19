@@ -74,44 +74,45 @@ class epoch_it:
             raise StopIteration
 
 
-def main():
-    class DropoutConfig:
-        enabled = False
-        p_hidden = 0.7
-        p_input = 0.8
+class Program:
+    def __init__(self, data_path="data/train.csv"):
+        class DropoutConfig:
+            enabled = True
+            p_hidden = 0.7
+            p_input = 0.8
 
-    network = MLP(
-        [
-            InputLayer(28 * 28),
-            Layer(100),
-            Layer(100),
-            Layer(100),
-            Layer(100),
-            OutputLayer(10),
-        ],
-        model=MultinoulliML(),
-        optimizer=Adam(eps=0.1, clip_threshold=None),
-        dropout=DropoutConfig,
-    )
+        self.network = MLP(
+            [
+                InputLayer(28 * 28),
+                Layer(100),
+                Layer(100),
+                Layer(100),
+                Layer(100),
+                OutputLayer(10),
+            ],
+            model=MultinoulliML(),
+            optimizer=Adam(eps=0.1, clip_threshold=None),
+            dropout=DropoutConfig,
+        )
 
-    batchsize = 20
-    epochs = 1
+        batchsize = 20
+        epochs = 1
 
-    data = np.loadtxt("data/train.csv", skiprows=1, delimiter=",", dtype=int)
-    valset = data[:100]
-    valset = (valset[:, 1:] / 255, valset[:, 0])
-    trainset = data[100:]
-    it = map(
-        lambda batch: (batch[:, 1:] / 255, batch[:, 0]),
-        epoch_it(trainset, epochs, batchsize=batchsize),
-    )
+        data = np.loadtxt(data_path, skiprows=1, delimiter=",", dtype=int)
+        valset = data[:100]
+        valset = (valset[:, 1:] / 255, valset[:, 0])
+        trainset = data[100:]
+        it = map(
+            lambda batch: (batch[:, 1:] / 255, batch[:, 0]),
+            epoch_it(trainset, epochs, batchsize=batchsize),
+        )
 
-    network.init_training(batchsize=batchsize, validation_set=valset)
+        self.network.init_training(batchsize=batchsize, validation_set=valset)
 
-    mlp_interface = MLPInterface(network, training_it=it)
+        mlp_interface = MLPInterface(self.network, training_it=it)
 
-    MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
+        MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
 
 
 if __name__ == "__main__":
-    main()
+    Program()

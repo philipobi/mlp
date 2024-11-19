@@ -133,7 +133,7 @@ class Layer(LayerDroppable):
     def init_dropout(self, batchsize):
         super().init_dropout(batchsize)
         self.p_dropout = self.dropout.p_hidden
-        self.W_s = np.empty_like(self.W)
+        self.W_s = np.copy(self.W)
         self.b_s = np.empty_like(self.b)
 
     def cleanup_training(self):
@@ -231,7 +231,7 @@ class OutputLayer(Layer):
         self._compute_dJdZ = lambda: compute_dJdZ(self)
 
     def init_dropout(self, batchsize):
-        self.W_s = np.empty_like(self.W)
+        self.W_s = np.copy(self.W)
         self.b_s = np.empty_like(self.b)
 
     def toggle_dropout(self):

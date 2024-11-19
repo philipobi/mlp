@@ -10,7 +10,7 @@ import numpy as np
 colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
 nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
-cmap = mpl.colormaps["tab20c"]
+# cmap = mpl.colormaps["tab20c"]
 
 
 def parse_float(s, default=None):
@@ -172,11 +172,16 @@ class MLPVisualization:
                 ["btn_start", "graph"], 
                 ["btn_stop", "graph"],
                 ["batch_c", "graph"],
-                ["empty", "graph"]
+                ["cbar", "graph"]
             ], 
-            height_ratios=[5, 5, 5, 5, 80],
             width_ratios=[5, 95],
-            empty_sentinel="empty"
+            height_ratios=[
+                5, 
+                5, 
+                5, 
+                5, 
+                80
+            ],
         )
         # fmt: on
 
@@ -230,6 +235,13 @@ class MLPVisualization:
         )
         batchc_ax.axis("off")
         batchc_ax.autoscale(enable=True)
+
+        self.fig.colorbar(
+            mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=cmap),
+            cax=axs["cbar"],
+            orientation="vertical",
+            label=r"$\text{LogNorm}(W_{ij})$",
+        )
 
         self.norm = SymLogNorm(linthresh=0.03)
 
