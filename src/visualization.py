@@ -2,15 +2,15 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection, LineCollection
 from matplotlib.colors import LinearSegmentedColormap, Normalize, SymLogNorm
-from matplotlib.widgets import TextBox
+from matplotlib.widgets import TextBox, Button
+from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
-from train import train
 
-colors = ["#e6550d", "#fdd0a2", "#000000", "#c7e9c0", "#31a354"]
+colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
 nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
-# cmap = mpl.colormaps["viridis"]
+cmap = mpl.colormaps["tab20c"]
 
 
 def parse_float(s, default=None):
@@ -47,6 +47,7 @@ class Edge:
     def __init__(self, node1, node2):
         self.node1 = node1
         self.node2 = node2
+        self.weight = 0
 
     @property
     def geometry(self):
@@ -54,7 +55,10 @@ class Edge:
 
 
 class LayerVisualization:
-    def __init__(self, layer):
+    def default_callback(self, event):
+        pass
+
+    def __init__(self, layer, callbacks={}):
         self.layer = layer
         self.width = layer.width
 
@@ -76,26 +80,35 @@ class LayerVisualization:
         if self.overfull:
             self.overfull_text.set_position((j * dx, 0))
 
-    @property
-    def weights(self):
+    def update_edge_weights(self):
         if self.incoming_edges:
-            if not self.overfull:
-                return self.layer.W.T
-            else:
-                w = self.layer.W.T
-                return np.concatenate((w[: self.count + 1], w[-self.count :]))
-        return None
+            W = self.weights
+            for edge in self.incoming_edges:
+                edge.weight = W[edge.node2.i, edge.node1.i]
 
     @property
     def activations(self):
-        return self.layer.A
+        return self.layer.activations
+
+    @property
+    def weights(self):
+        return self.layer.weights
 
 
 class MLPVisualization:
+    training_interval = 20
     maxwidth = 10
+    default_hooks = {"train_batch": lambda: False, "stop_training": lambda: None}
 
-    def __init__(self, mlp, dx, dy, r):
-        self.layers = [LayerVisualization(layer) for layer in mlp.layers]
+    def __init__(self, mlp_interface, dx, dy, r):
+        self._train_batch = mlp_interface.hooks.get(
+            "train_batch", self.default_hooks["train_batch"]
+        )
+        self._stop_training = mlp_interface.hooks.get(
+            "stop_training", self.default_hooks["stop_training"]
+        )
+
+        self.layers = [LayerVisualization(layer) for layer in mlp_interface.layers]
 
         self.dx = dx
         self.dy = dy
@@ -151,24 +164,34 @@ class MLPVisualization:
 
         # create mpl objects
         self.fig = plt.figure(layout="constrained")
-        axs = self.fig.subplot_mosaic(
-            [["dx", "graph"], ["dy", "graph"]], width_ratios=[5, 95]
-        )
-        self.ax1 = axs["graph"]
-        self.ax2 = axs["dx"]
-        self.ax3 = axs["dy"]
 
+        # fmt: off
+        axs = self.fig.subplot_mosaic(
+            [
+                ["box_dxdy", "graph"], 
+                ["btn_start", "graph"], 
+                ["btn_stop", "graph"],
+                ["batch_c", "graph"],
+                ["empty", "graph"]
+            ], 
+            height_ratios=[5, 5, 5, 5, 80],
+            width_ratios=[5, 95],
+            empty_sentinel="empty"
+        )
+        # fmt: on
+
+        self.ax1 = axs["graph"]
         self.ax1.axis("off")
         self.ax1.set_aspect("equal")
 
         self.patch_c = PatchCollection(
             [],
             transform=self.ax1.transData,
-            edgecolor="black",
+            edgecolor="#bdbdbd",
             facecolor="white",
             linewidth=2 * Node.radius,
         )
-        self.line_c = LineCollection([], color="black", zorder=-1, linewidth=5)
+        self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=5)
 
         for layer in self.layers:
             if layer.overfull:
@@ -184,36 +207,73 @@ class MLPVisualization:
         self.ax1.add_collection(self.patch_c)
         self.ax1.add_collection(self.line_c)
 
-        self.dx_box = TextBox(ax=self.ax2, label="dx", textalignment="left")
-        self.dy_box = TextBox(ax=self.ax3, label="dy", textalignment="left")
-        self.dx_box.on_submit(self.update_geometry)
-        self.dy_box.on_submit(self.update_geometry)
-        self.dx_box.set_val(str(self.dx))
-        self.dy_box.set_val(str(self.dy))
+        self.box_dxdy = TextBox(
+            ax=axs["box_dxdy"], label="(dx, dy)", textalignment="left"
+        )
+        self.box_dxdy.on_submit(self.update_geometry)
+        self.box_dxdy.set_val(f"{self.dx}, {self.dy}")
+
+        btn_start = Button(ax=axs["btn_start"], label="Start")
+        self.ani = None
+        btn_start.on_clicked(self.start_training)
+        btn_stop = Button(ax=axs["btn_stop"], label="Stop")
+        btn_stop.on_clicked(self.stop_training)
+
+        batchc_ax = axs["batch_c"]
+        self.batchc_text = batchc_ax.text(
+            x=0,
+            y=0,
+            s=f"Batches: {0:06}",
+            ha="center",
+            va="center",
+            fontsize=12.0,
+        )
+        batchc_ax.axis("off")
+        batchc_ax.autoscale(enable=True)
+
         self.norm = SymLogNorm(linthresh=0.03)
 
         self.update_weights()
         plt.show()
 
-    def update_weights(self):
-        weights = np.concatenate(
-            tuple((W for layer in self.layers if (W := layer.weights) is not None)),
-            axis=None,
+    def update_frame(self, frame):
+        if not self._train_batch():
+            self.ani.event_source.stop()
+        else:
+            self.update_weights()
+            self.batchc_text.set_text(f"Batches: {frame+1:06}")
+
+    def start_training(self, _):
+        self.ani = FuncAnimation(
+            fig=self.fig,
+            func=self.update_frame,
+            frames=None,
+            cache_frame_data=False,
+            interval=self.training_interval,
         )
+
+    def stop_training(self, _):
+        if self.ani is not None:
+            self.ani.event_source.stop()
+            print("stopped animation")
+
+    def update_weights(self):
+        for layer in self.layers:
+            layer.update_edge_weights()
+
+        weights = np.array([edge.weight for edge in self.edges])
+
         self.norm.vmin = weights.min()
         self.norm.vmax = weights.max()
-        # scaled = np.where(
-        #     weights >= 0, 0.5 * (1 + weights / wmax), 0.5 / wmin * (wmin - weights)
-        # )
 
-        colors = cmap(1 / (1 + np.exp(-weights)))
-        self.line_c.set_colors(colors)
+        self.line_c.set_colors(cmap(self.norm(weights)))
 
     def update_geometry(self, val):
-        self.dx = parse_float(self.dx_box.text, default=self.dx)
-        self.dy = parse_float(self.dy_box.text, default=self.dy)
+        dx, dy = self.box_dxdy.text.split(",")
+        self.dx = parse_float(dx, default=self.dx)
+        self.dy = parse_float(dy, default=self.dy)
 
-        self.draw_nodes()
+        self.draw_graph()
         x_min = self.x_minnode.geometry.get_extents().xmin
         x_max = self.x_maxnode.geometry.get_extents().xmax
         y_max = self.y_maxnode.geometry.get_extents().ymax
@@ -225,25 +285,9 @@ class MLPVisualization:
         self.ax1.autoscale_view()
         self.fig.canvas.draw_idle()
 
-    def draw_nodes(self):
+    def draw_graph(self):
         for j, layer in enumerate(self.layers):
             layer.draw(j, self.dx, self.dy)
 
         self.patch_c.set_paths(self.patches)
         self.line_c.set_segments([edge.geometry for edge in self.edges])
-
-
-class Program:
-    def __init__(self):
-        self.mlp = train()
-
-    def draw(self):
-        self.vis = MLPVisualization(mlp=self.mlp, dx=1, dy=1, r=1)
-
-
-def main():
-    Program()
-
-
-if __name__ == "__main__":
-    main()
