@@ -1,13 +1,16 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection, LineCollection
-from matplotlib.colors import LinearSegmentedColormap, Normalize
+from matplotlib.colors import LinearSegmentedColormap, Normalize, SymLogNorm
 from matplotlib.widgets import TextBox
+import matplotlib as mpl
 import numpy as np
+from train import train
 
 colors = ["#e6550d", "#fdd0a2", "#000000", "#c7e9c0", "#31a354"]
 nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
+# cmap = mpl.colormaps["viridis"]
 
 
 def parse_float(s, default=None):
@@ -50,7 +53,7 @@ class Edge:
         return [self.node1.xy, self.node2.xy]
 
 
-class Layer:
+class LayerVisualization:
     def __init__(self, layer):
         self.layer = layer
         self.width = layer.width
@@ -88,25 +91,11 @@ class Layer:
         return self.layer.A
 
 
-class LayerInterface:
-    def __init__(self, w):
-        self.width = w
-
-
-class MLPInterface:
-    layers = [
-        LayerInterface(28 * 28),
-        LayerInterface(5),
-        LayerInterface(5),
-        LayerInterface(10),
-    ]
-
-
 class MLPVisualization:
     maxwidth = 10
 
     def __init__(self, mlp, dx, dy, r):
-        self.layers = [Layer(layer) for layer in mlp.layers]
+        self.layers = [LayerVisualization(layer) for layer in mlp.layers]
 
         self.dx = dx
         self.dy = dy
@@ -161,8 +150,14 @@ class MLPVisualization:
             self.edges.extend(edges)
 
         # create mpl objects
-        self.fig, ax = plt.subplots(3, 1, height_ratios=[8, 1, 1])
-        (self.ax1, self.ax2, self.ax3) = ax
+        self.fig = plt.figure(layout="constrained")
+        axs = self.fig.subplot_mosaic(
+            [["dx", "graph"], ["dy", "graph"]], width_ratios=[5, 95]
+        )
+        self.ax1 = axs["graph"]
+        self.ax2 = axs["dx"]
+        self.ax3 = axs["dy"]
+
         self.ax1.axis("off")
         self.ax1.set_aspect("equal")
 
@@ -173,7 +168,8 @@ class MLPVisualization:
             facecolor="white",
             linewidth=2 * Node.radius,
         )
-        self.line_c = LineCollection([], color="black", zorder=-1)
+        self.line_c = LineCollection([], color="black", zorder=-1, linewidth=5)
+
         for layer in self.layers:
             if layer.overfull:
                 layer.overfull_text = self.ax1.text(
@@ -194,15 +190,23 @@ class MLPVisualization:
         self.dy_box.on_submit(self.update_geometry)
         self.dx_box.set_val(str(self.dx))
         self.dy_box.set_val(str(self.dy))
+        self.norm = SymLogNorm(linthresh=0.03)
 
+        self.update_weights()
         plt.show()
 
     def update_weights(self):
         weights = np.concatenate(
-            (W for layer in self.layers if (W := layer.weights) is not None), axis=None
+            tuple((W for layer in self.layers if (W := layer.weights) is not None)),
+            axis=None,
         )
-        w_min = weights.min()
-        colors = cmap((weights - w_min) / (weights.max() - w_min))
+        self.norm.vmin = weights.min()
+        self.norm.vmax = weights.max()
+        # scaled = np.where(
+        #     weights >= 0, 0.5 * (1 + weights / wmax), 0.5 / wmin * (wmin - weights)
+        # )
+
+        colors = cmap(1 / (1 + np.exp(-weights)))
         self.line_c.set_colors(colors)
 
     def update_geometry(self, val):
@@ -223,15 +227,23 @@ class MLPVisualization:
 
     def draw_nodes(self):
         for j, layer in enumerate(self.layers):
-            for node in layer.nodes:
-                node.xy = (j * self.dx, self.dy * node.y_ord)
+            layer.draw(j, self.dx, self.dy)
 
         self.patch_c.set_paths(self.patches)
         self.line_c.set_segments([edge.geometry for edge in self.edges])
 
 
+class Program:
+    def __init__(self):
+        self.mlp = train()
+
+    def draw(self):
+        self.vis = MLPVisualization(mlp=self.mlp, dx=1, dy=1, r=1)
+
+
 def main():
-    vis = MLPVisualization(mlp=MLPInterface, dx=1, dy=1, r=1)
+    Program()
 
 
-main()
+if __name__ == "__main__":
+    main()
