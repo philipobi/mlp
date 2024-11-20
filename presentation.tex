@@ -1,0 +1,261 @@
+\documentclass{beamer}
+
+\usepackage{mathtools}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{bm}
+\usepackage{relsize}
+\usepackage{float}
+\usepackage{csquotes}
+\usepackage{graphicx}
+\usepackage{dirtytalk}
+
+\setlength{\parindent}{0pt}
+
+\def\noval{}
+
+\DeclarePairedDelimiter{\br}{(}{)}
+\DeclarePairedDelimiter{\brr}{[}{]}
+\DeclarePairedDelimiter{\brs}{\{}{\}}
+\DeclarePairedDelimiter{\abs}{\lvert}{\rvert}
+\DeclarePairedDelimiter{\norm}{\lVert}{\rVert}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+\makeatletter
+\let\oldbr\br
+\def\br{\@ifstar{\oldbr}{\oldbr*}}
+\makeatother
+
+\makeatletter
+\let\oldbrr\brr
+\def\brr{\@ifstar{\oldbrr}{\oldbrr*}}
+\makeatother
+
+\makeatletter
+\let\oldbrs\brs
+\def\brs{\@ifstar{\oldbrs}{\oldbrs*}}
+\makeatother
+
+\makeatletter
+\let\oldabs\abs
+\def\abs{\@ifstar{\oldabs}{\oldabs*}}
+\makeatother
+
+\makeatletter
+\let\oldnorm\norm
+\def\norm{\@ifstar{\oldnorm}{\oldnorm*}}
+\makeatother
+
+\makeatletter
+\let\oldlog\log
+\def\log{\@ifstar\@log\@@log}
+\def\@log#1{\oldlog\br{#1}}
+\def\@@log#1{\oldlog#1}
+\makeatother
+
+
+\makeatletter
+\newcommand{\set}[2]{
+    \def\@delim{\;\@ifstar{\middle|}{:}\;}
+    \ifx\noval#2\noval%
+        \left\{#1\right\}
+    \else
+        \left\{#1\@delim#2\right\}
+    \fi
+}
+\makeatother
+
+\newcommand{\E}[2][]{%
+    \ifx\noval#1\noval%
+        \mathbb{E}\brr{#2}
+    \else
+        \mathbb{E}_{#1}\brr{#2}
+    \fi
+}
+\newcommand{\var}[2][]{%
+    \ifx\noval#1\noval%
+        \text{Var}\br{#2}
+    \else
+        \text{Var}_{#1}\br{#2}
+    \fi
+}
+\newcommand{\cov}[2][]{%
+    \ifx\noval#1\noval%
+        \text{Cov}\br{#2}
+    \else
+        \text{Cov}_{#1}\br{#2}
+    \fi
+}
+
+\newcommand{\est}[1]{\hat{#1}_m}
+\newcommand{\bias}[1]{\text{bias}\br{#1}}
+
+
+\newcommand{\arrow}{$\rightarrow\;$}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\T}{\text{T}}
+\renewcommand{\v}{\bm}
+\renewcommand{\c}[2]{\left(#1\;\middle|\;#2\right)}
+\renewcommand{\det}[1]{\text{det}\br{#1}}
+\newcommand{\ml}[1]{\mathlarger{#1}\,}
+\newcommand{\dkl}[2]{D_{\text{KL}}(#1\;\Vert\;#2)}
+\renewcommand{\S}{\mathbb{S}}
+\newcommand{\func}[3]{#1:#2\rightarrow#3}
+\newcommand{\p}[1]{p_\text{#1}}
+\renewcommand{\k}[2]{#1^{(#2)}}
+
+
+\begin{document}
+\begin{frame}
+    \frametitle{A broad Definition of Machine Learning}
+    
+        \say{A computer program is said to learn from experience E 
+        with respect to some class of tasks T and performance measure P, 
+        if its performance at tasks in T, as measured by P, improves with
+        experience.} \cite{mitchell97}
+    
+\end{frame}
+\begin{frame}
+    \frametitle{Types of tasks T}
+    Generally, task is to learn some highly complex function
+    \begin{flalign*}
+        \func{f}{\R^n}{\R^m}, f(x) = y
+    \end{flalign*}
+    Common tasks:
+    \begin{itemize}
+        \item Classification
+        \item Regression
+        \item Structured output
+        \item Probability density estimation
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Types of experience E}
+    Learning usually through observing dataset of examples 
+    \begin{itemize}
+        \item Unsupervised learning: learn useful properties of dataset
+        \item Supervised learning: given examples $(x_i, y_i)$, learn $p\c{y}{x}$
+        \item Reinforcement learning: learn from interaction with environment
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Performance Measure P}
+    Goal: find a function $J(\theta)$ which estimates performance on unseen data and can be optimized well\\
+    \vspace{0.2cm}
+    $J(\theta)$: Cost function\\
+    \vspace{0.2cm}
+    $\theta$: model parameters
+\end{frame}
+
+\begin{frame}
+    \frametitle{Types of Error}
+    \begin{itemize}
+        \item Training error: error on set of examples
+        \item Generalization error: real-world error on new data \\
+        \vspace{0.3cm}
+        \arrow Goal: low training error \textbf{and} low generalization error
+    \end{itemize}
+    
+    \vspace{0.5cm}
+    
+    Estimate generalization error by splitting examples into training and test set, making i.i.d. assumptions:
+    \begin{itemize}
+        \item all examples independent from each other
+        \item training and test set identically distributed
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Under- and Overfitting}
+    \begin{figure}[H]
+        \includegraphics{img/deep learning/test_generalization_error.pdf}
+        \caption{Typical relationship between capacity and error \cite{textbook}}
+    \end{figure}
+    
+    \begin{itemize}
+        \item Capacity: ability of model to fit function to be learned
+        \item Underfitting: model cannot reduce training error enough
+        \item Overfitting: large gap between training and generalization error
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Basics: Statistics, Information Theory}
+    Empirical distribution:    
+    \begin{flalign*}
+        \hat{p}(X = x) = \frac{1}{m} \sum_{i=1}^{m} \delta(x - x_i) &&
+    \end{flalign*}
+    
+    Self-information of event $X = x$:
+    \begin{flalign*}
+        I(X = x) := -\log{p(X=x)} 
+    \end{flalign*}
+    
+    Shannon entropy:
+    \begin{flalign*}
+        H(X) := \E[X \sim p]{I(X = x)}
+    \end{flalign*}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Basics: Statistics, Information Theory}
+    Kullback-Leibler divergence:
+    \begin{flalign*}
+        \dkl{p}{q} := \E[X \sim p]{\log{\frac{p(X=x)}{q(X=x)}}} \geq 0
+    \end{flalign*}
+    \arrow Measure of how different distributions $p$ and $q$ are
+    
+    \begin{figure}
+        \includegraphics[width=0.8\textwidth]{img/deep learning/kl_divergence.pdf}
+        \caption{Asymmetry of the KL divergence \cite{textbook}}
+    \end{figure}    
+\end{frame}
+
+\begin{frame}
+    \frametitle{Maximum Likelihood Estimator}
+    
+    Prerequisites:
+    \begin{itemize}
+        \item i.i.d. assumption \arrow view individual examples $x_i \in \mathbb{X}=\set{x_1, \ldots, x_m}{}$ as being drawn from $\p{data}(x)$
+        \item Estimator of some parameter $\theta^\ast$: $\theta_m = g(x_1, \ldots, x_m)$
+        \item $\p{model}(x; \theta)$: family of probability distributions, indexed by $\theta$
+        \item $\hat{p}_{\text{data},m}$: empirical distribution defined by $\mathbb{X}$
+    \end{itemize}
+
+    \vspace{0.5cm}
+    Maximum Likelihood Estimator for $\theta$:
+    \begin{align*}
+         \k{\theta}{ML}_m 
+        :=& \argmax_\theta \prod_{i=1}^{m} \p{model}(x_i; \theta) \\
+        =& \argmin_\theta \E[x\sim \hat{p}_{\text{data},m}]{-\log{\p{model}(x; \theta)}} \\
+        =& \argmin_\theta \dkl{\hat{p}_{\text{data}, m}}{\p{model}}
+    \end{align*}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Maximum Likelihood Properties}
+    \begin{itemize}
+        \item $\k{\theta}{ML}_m$ minimizes dissimilarity between observed distribution $\hat{p}_{\text{data},m}$ and model distribution $\p{model}$
+        \item \say{consistency}: if $\exists\ \theta^\ast$ such that real distribution $\p{data}(x) = \p{model}(x; \theta^\ast)$, then $\k{\theta}{ML}_m \to \theta^\ast$ for $m \to \infty$
+        \item \say{statistical efficiency}: for given, large $m$, no other estimator $\theta_m$ is closer to $\theta^\ast$
+        \item provides \say{natural} way of defining cost function $J(\theta)$
+    \end{itemize}
+\end{frame}
+
+\begin{frame}
+
+\end{frame}
+
+
+
+\begin{thebibliography}{9}
+    \bibitem{textbook}
+    Goodfellow et al.
+    \bibitem{mitchell97}
+    Mitchell, T. M. (1997). Machine Learning.
+\end{thebibliography}
+\end{document}
