@@ -152,35 +152,18 @@
 \end{frame}
 
 \begin{frame}
-    \frametitle{Types of Error}
-    \begin{itemize}
-        \item Training error: error on set of examples
-        \item Generalization error: real-world error on new data \\
-        \vspace{0.3cm}
-        \arrow Goal: low training error \textbf{and} low generalization error
-    \end{itemize}
-    
-    \vspace{0.5cm}
-    
-    Estimate generalization error by splitting examples into training and test set, making i.i.d. assumptions:
-    \begin{itemize}
-        \item all examples independent from each other
-        \item training and test set identically distributed
-    \end{itemize}
-\end{frame}
-
-\begin{frame}
-    \frametitle{Under- and Overfitting}
+    \frametitle{Different Types of Error}
     \begin{figure}[H]
-        \includegraphics{img/deep learning/test_generalization_error.pdf}
+        \includegraphics[width=0.8\textwidth]{img/deep learning/test_generalization_error.pdf}
         \caption{Typical relationship between capacity and error \cite{textbook}}
     \end{figure}
     
     \begin{itemize}
         \item Capacity: ability of model to fit function to be learned
-        \item Underfitting: model cannot reduce training error enough
-        \item Overfitting: large gap between training and generalization error
+        \item Training error: error on set of training examples
+        \item Generalization error: real-world error on new data
     \end{itemize}
+    \arrow Goal: low training \textbf{and} generalization error
 \end{frame}
 
 \begin{frame}
@@ -237,25 +220,63 @@
 \end{frame}
 
 \begin{frame}
-    \frametitle{Maximum Likelihood Properties}
+    \frametitle{Maximum Likelihood Estimator}
+    Properties
     \begin{itemize}
         \item $\k{\theta}{ML}_m$ minimizes dissimilarity between observed distribution $\hat{p}_{\text{data},m}$ and model distribution $\p{model}$
-        \item \say{consistency}: if $\exists\ \theta^\ast$ such that real distribution $\p{data}(x) = \p{model}(x; \theta^\ast)$, then $\k{\theta}{ML}_m \to \theta^\ast$ for $m \to \infty$
-        \item \say{statistical efficiency}: for given, large $m$, no other estimator $\theta_m$ is closer to $\theta^\ast$
-        \item provides \say{natural} way of defining cost function $J(\theta)$
+        \item Consistency and statistical efficiency
+        \item Provides framework for defining and optimizing $J(\theta)$
     \end{itemize}
+    \vspace{0.5cm}
+    Generalization to conditional probabilities $p\c{y}{x}$:
+    \begin{flalign*}
+        \theta^{(ML)}_{m} := \argmin_\theta \frac{1}{m} \sum_{i=1}^{m} - \log{\p{model}\c{x_i}{y_i; \theta}}
+    \end{flalign*}
 \end{frame}
 
 \begin{frame}
+    \frametitle{Deep Learning and Neural Networks}
+    \begin{itemize}
+        \item \textbf{Network}: learned function $f(x)$ can be described by network of nodes
+        \item \textbf{Neural}: graph nodes play role analogous to biological neuron
+        \item \textbf{Deep} Learning: \say{depth} of networks
+    \end{itemize}
 
+    \begin{figure}
+        \includegraphics[width=0.3\textwidth]{img/dropout/neural_network_visualization.pdf}
+        \caption{Simple Deep Neural Network \cite{dropout}}
+    \end{figure}
 \end{frame}
 
+\begin{frame}
+    \frametitle{Deep Feedforward Networks}
+    Typically have layer structure:
+    \begin{figure}
+        \includegraphics[width=0.8\textwidth]{img/dropout/neural_network_visualization_annotated.pdf}
+        \caption{Layer Structure of Deep Feedforward Networks \cite{dropout} (annotated)}
+    \end{figure}
+\end{frame}
 
+\begin{frame}
+    \frametitle{Why/How does Deep Learning Work?}
+    \begin{figure}
+        \begin{minipage}[c]{0.67\textwidth}
+          \includegraphics[width=\textwidth]{img/deep learning/deep_learning_representation.pdf}
+        \end{minipage}\hfill
+        \begin{minipage}[c]{0.3\textwidth}
+          \caption{
+            Layers enable building complex concepts out of simpler concepts \cite{textbook}
+          } \label{fig:03-03}
+        \end{minipage}
+      \end{figure}
+\end{frame}
 
 \begin{thebibliography}{9}
     \bibitem{textbook}
     Goodfellow et al.
     \bibitem{mitchell97}
     Mitchell, T. M. (1997). Machine Learning.
+    \bibitem{dropout}
+    Dropout: A Simple Way to Prevent Neural Networks from Overfitting
 \end{thebibliography}
 \end{document}
