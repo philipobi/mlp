@@ -10,7 +10,6 @@
 \usepackage{graphicx}
 \usepackage{dirtytalk}
 
-
 \setlength{\parindent}{0pt}
 
 \def\noval{}
@@ -55,7 +54,6 @@
 \def\@@log#1{\oldlog#1}
 \makeatother
 
-
 \makeatletter
 \newcommand{\set}[2]{
     \def\@delim{\;\@ifstar{\middle|}{:}\;}
@@ -94,6 +92,7 @@
 
 
 \newcommand{\arrow}{$\rightarrow\;$}
+\newcommand{\smallmin}{\scalebox{0.8}{-}}
 
 \newcommand{\R}{\mathbb{R}}
 \newcommand{\T}{\text{T}}
@@ -320,24 +319,43 @@
 \end{frame}
 
 \begin{frame}
-    \frametitle{foo}
-    % \begin{flalign*}
-    %     \k{a}{1} = \text{ReLU}\br{
-    %     \begin{bmatrix*}
-    %         -5 \ \\
-    %         -1 \\
-    %          1 \\
-    %          1 \\
-    %          3 \\
-    %          3 
-    %     \end{bmatrix*} \ x + 
-    %     \begin{bmatrix*}
-    %         -7.5 \ \\
-    %         -1 \\
-    %         1 \\
-            
-    %     \end{bmatrix*}}
-    % \end{flalign*}
+    \frametitle{Shallow Network with ReLU as Universal Approximator}
+    
+    
+    \begin{minipage}{0.4\textwidth}
+        \begin{flalign*}
+            \k{a}{1} &= \text{ReLU}\br{\k{W}{1}x + \k{b}{1}} &&\\
+            &= \text{ReLU}\br{
+            \begin{bsmallmatrix*}
+                \smallmin 5 \ \\
+                \smallmin 1 \\
+                 1 \\
+                 1 \\
+                 3 \\
+                 3 
+            \end{bsmallmatrix*} \, x + 
+            \begin{bsmallmatrix*}
+                \smallmin 7.5 \ \\
+                \smallmin 1 \\
+                1 \\
+                \smallmin 0.2 \\
+                \smallmin 1.8 \\
+                -3 
+            \end{bsmallmatrix*}} &&\\
+            &&&\\
+            y &= \k{W}{2}\k{a}{1} + \k{b}{2} &&\\
+            &= \begin{bsmallmatrix*}
+                \smallmin 1,& \smallmin 1,& \smallmin 1,& 1,& 1,& 1
+            \end{bsmallmatrix*} \, \k{a}{1} &&
+        \end{flalign*}
+    \end{minipage}
+    \begin{minipage}{0.4\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.9\textwidth]{img/relu_approximation_network.pdf}
+            \includegraphics[width=\textwidth]{img/relu_approximation_output.pdf}
+            \caption{Network visualization and output}
+        \end{figure}
+    \end{minipage}
 \end{frame}
 
 \begin{thebibliography}{9}
