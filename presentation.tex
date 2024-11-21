@@ -10,6 +10,7 @@
 \usepackage{graphicx}
 \usepackage{dirtytalk}
 
+
 \setlength{\parindent}{0pt}
 
 \def\noval{}
@@ -296,8 +297,47 @@
 
 \begin{frame}
     \frametitle{Universal Approximation Theorems}
-    Prove that functions can be approximated arbitrarily well with neural networks
+    \begin{itemize}
+        \item Prove that it is possible to approximate functions arbitrarily well with neural networks
+        \item Requirement: non-linearity e.g. $\text{ReLU}(x) = \max(0, x)$
+        \item Network with one hidden layer and ReLU activation is a universal approximator
+    \end{itemize}
+    Illustration:
+    
+    \begin{minipage}[t]{0.49\textwidth}
+        \begin{figure}
+            \includegraphics[height=0.5\textwidth]{img/relu_plot.pdf}
+            \caption{Plot of ReLU$(x)$}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[t]{0.49\textwidth}
+        \begin{figure}
+            \includegraphics[height=0.5\textwidth]{img/relu_approximation.pdf}
+            \caption{Approximation of $y(x) = x^3+x^2-x-1$ using 6 ReLU nodes}
+        \end{figure}
+    \end{minipage}
 
+\end{frame}
+
+\begin{frame}
+    \frametitle{foo}
+    % \begin{flalign*}
+    %     \k{a}{1} = \text{ReLU}\br{
+    %     \begin{bmatrix*}
+    %         -5 \ \\
+    %         -1 \\
+    %          1 \\
+    %          1 \\
+    %          3 \\
+    %          3 
+    %     \end{bmatrix*} \ x + 
+    %     \begin{bmatrix*}
+    %         -7.5 \ \\
+    %         -1 \\
+    %         1 \\
+            
+    %     \end{bmatrix*}}
+    % \end{flalign*}
 \end{frame}
 
 \begin{thebibliography}{9}
