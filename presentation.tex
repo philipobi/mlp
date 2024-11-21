@@ -253,22 +253,51 @@
     Typically have layer structure:
     \begin{figure}
         \includegraphics[width=0.8\textwidth]{img/dropout/neural_network_visualization_annotated.pdf}
-        \caption{Layer Structure of Deep Feedforward Networks \cite{dropout} (annotated)}
+        \caption{Layer Structure of Deep Feedforward Networks \cite{dropout}\textsuperscript{*}}
     \end{figure}
 \end{frame}
 
 \begin{frame}
-    \frametitle{Why/How does Deep Learning Work?}
+    \frametitle{How does Deep Learning Work?}
     \begin{figure}
         \begin{minipage}[c]{0.67\textwidth}
           \includegraphics[width=\textwidth]{img/deep learning/deep_learning_representation.pdf}
         \end{minipage}\hfill
         \begin{minipage}[c]{0.3\textwidth}
           \caption{
-            Layers enable building complex concepts out of simpler concepts \cite{textbook}
+            Deep Networks solve difficult tasks by building complex concepts out of simpler concepts \cite{textbook}
           } \label{fig:03-03}
         \end{minipage}
       \end{figure}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Deep Learning as Extension of Linear Models}
+    Network composed of \textbf{kernel} $\phi(x; \theta)$ and linear output layer:
+    \begin{equation*}
+        f(x) = \k{f}{N}(\ldots \k{f}{1}(x)) = \k{W}{N}\phi(x; \theta) + \k{b}{N}
+    \end{equation*}
+    
+    \begin{minipage}[b]{0.49\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.8\textwidth]{img/dropout/network_kernel.pdf}
+            \caption{Deep Network as linear layer with kernel \cite{dropout}\textsuperscript{*}}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[b]{0.49\textwidth}
+        \begin{figure}
+            \includegraphics[width=\textwidth]{img/kernel trick.pdf}
+            \caption{mapping with $\phi$ makes input linearly separable \cite{kernel}\textsuperscript{*}}
+        \end{figure}
+    \end{minipage}
+    
+    \arrow Deep Learning: learn kernel and regression parameters
+\end{frame}
+
+\begin{frame}
+    \frametitle{Universal Approximation Theorems}
+    Prove that functions can be approximated arbitrarily well with neural networks
+
 \end{frame}
 
 \begin{thebibliography}{9}
@@ -278,5 +307,7 @@
     Mitchell, T. M. (1997). Machine Learning.
     \bibitem{dropout}
     Dropout: A Simple Way to Prevent Neural Networks from Overfitting
+    \bibitem{kernel}
+    Pham, Trong-Ton. (2010). MODELE DE GRAPHE ET MODELE DE LANGUE POUR LA RECONNAISSANCE DE SCENES VISUELLES.
 \end{thebibliography}
 \end{document}
