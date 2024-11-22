@@ -9,7 +9,9 @@
 \usepackage{csquotes}
 \usepackage{graphicx}
 \usepackage{dirtytalk}
-\usepackage{wrapfig}
+\usepackage{xcolor}
+\usepackage{caption}
+\usepackage{pgffor}
 
 \setlength{\parindent}{0pt}
 
@@ -177,13 +179,13 @@
     \end{itemize}
 
     \begin{figure}
-        \includegraphics[width=0.3\textwidth]{img/dropout/neural_network_visualization.pdf}
+        \includegraphics[width=0.4\textwidth]{img/dropout/neural_network_visualization.pdf}
         \caption{Simple Deep Neural Network \cite{dropout}\textsuperscript{*}}
     \end{figure}
 \end{frame}
 
 \begin{frame}
-    \frametitle{Deep Feedforward Networks}
+    \frametitle{Deep Feedforward Networks (MLPs)}
     Typically have layer structure:
     \begin{figure}
         \includegraphics[width=0.8\textwidth]{img/dropout/neural_network_visualization_annotated.pdf}
@@ -369,6 +371,88 @@
     \end{itemize}
 \end{frame}
 
+\begin{frame}
+    \frametitle{Cost Functions and Gradient Descent}
+    
+    Cost functions:
+    \begin{itemize}
+        \item Often sum over per-example loss: $J(\theta) = \frac{1}{m} \sum_{i=1}^
+        {m}L(x_i, y_i; \theta)$
+        \vspace{0.2cm}
+        \item MLE: $L(x, y, \theta) = -\log{\p{model}\c{y}{x; \theta}}$
+    \end{itemize}
+    
+    \vspace{0.4cm}
+    
+    Gradient descent:
+    \begin{itemize}
+        \item Iteratively minimize $J$: $\ \theta_{k+1} = \theta_k - \epsilon \nabla_\theta J(\theta_k)$
+        \item Problem: computational cost of one step $\propto m$
+    \end{itemize}
+
+    \begin{figure}
+        \includegraphics[width=0.6\textwidth]{img/gradient_descent.png}
+        \caption{Visualization of gradient descent \cite{arnold}}
+    \end{figure}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Stochastic Gradient Descent and Momentum}
+    Stochastic Gradient Descent:
+    \vspace{-0.2cm}
+    \begin{equation*}
+        \nabla_\theta J(\theta) \approx g = \frac{1}{m^\prime} \sum_{i=1}^{m^\prime} \nabla_\theta L(x_i, y_i; \theta), \quad m^\prime \ll m
+    \end{equation*}\\
+    \vspace{-0.2cm}
+    \arrow Use randomly drawn minibatch of examples to estimate $\nabla_\theta J$
+
+    \begin{minipage}[b]{0.51\textwidth}
+        \vspace{0.4cm}
+        Momentum:
+        \vspace{-0.3cm}
+        \begin{flalign*}
+            & v_{k+1} = \alpha v_k - \epsilon \nabla_\theta J(\theta_{k}) &&\\
+            & \theta_{k+1} = \theta_k + v_{k+1} &&\\
+            & \alpha \in [0,1)&&
+        \end{flalign*}
+        \vspace{-0.7cm}
+        \begin{itemize}
+            \item Weighted average stabilizes gradient
+            \item Analogy: particle with friction, velocity $v$
+        \end{itemize}
+    \end{minipage}
+    \begin{minipage}[b]{0.47\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.7\linewidth]{img/deep learning/momentum.pdf}
+            \vspace{-0.2cm}
+            \hspace{3.4em}
+            \caption{Comparison of GD\\ \textbf{\textcolor{red}{with}} and \textbf{without} momentum \cite{textbook}}
+            \vspace{-0.7cm}
+        \end{figure}
+    \end{minipage}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Backpropagation - General Formulation}
+    Algorithm for computing $\frac{\partial F}{\partial X}, \ X \in \set{A, \ldots, F}{}$:
+        \begin{itemize}
+            \item Start at node $F$, $\frac{\partial F}{\partial F} = 1$
+            \item Propagate backwards along graph, \textbf{re-using partial derivatives} of previous nodes, e.g.: $\frac{\partial F}{\partial C} = \frac{\partial F}{\partial E}\frac{\partial E}{\partial C}$
+        \end{itemize}
+    
+    \begin{figure}
+        \centering
+        \foreach \n in {1,...,6}{\only<\n>{\includegraphics[width=5cm]{img/backprop/backprop_\n.pdf}}}
+        \caption{Example of Backpropagation through a graph \cite{dag}\textsuperscript{*}}
+    \end{figure}
+    \arrow For deep/complex graphs: exponential speedup compared to recomputing all intermediate $\frac{\partial F}{\partial X}$ for each node
+\end{frame}
+
+\begin{frame}
+    \frametitle{Backpropagation for MLPs}
+    
+\end{frame}
+
 
 \begin{thebibliography}{9}
     \bibitem{textbook}
@@ -379,5 +463,9 @@
     Dropout: A Simple Way to Prevent Neural Networks from Overfitting
     \bibitem{kernel}
     Pham, Trong-Ton. (2010). MODELE DE GRAPHE ET MODELE DE LANGUE POUR LA RECONNAISSANCE DE SCENES VISUELLES.
+    \bibitem{arnold}
+    https://ludovicarnold.com/teaching/optimization/gradient-descent/
+    \bibitem{dag}
+    https://commons.wikimedia.org/w/index.php?curid=3211391
 \end{thebibliography}
 \end{document}
