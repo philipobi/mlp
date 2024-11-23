@@ -13,6 +13,10 @@
 \usepackage[export]{adjustbox}
 \usepackage{hyperref}
 \usepackage{changepage}
+\usepackage{tabularray}
+
+\definecolor{Silver}{rgb}{0.752,0.752,0.752}
+
 
 \setlength{\parindent}{0pt}
 
@@ -254,6 +258,7 @@
     \end{minipage}
     
     \arrow Deep Learning: learn kernel and regression parameters
+    %kernel: extracts features from x or new representation for x
 \end{frame}
 
 \begin{frame}
@@ -428,7 +433,7 @@
 
 \begin{frame}
     \frametitle{Stochastic Gradient Descent and Momentum}
-    Stochastic Gradient Descent:
+    Stochastic Gradient Descent (SGD):
     \vspace{-0.2cm}
     \begin{equation*}
         \nabla_\theta J(\theta) \approx g = \frac{1}{m^\prime} \sum_{i=1}^{m^\prime} \nabla_\theta L(x_i, y_i; \theta), \quad m^\prime \ll m
@@ -560,11 +565,41 @@
 \begin{frame}
     \frametitle{Training a MLP to Classify Digits with the MNIST Dataset}
 
+    Model Architecture:
+    \begin{itemize}
+        \item Input layer: width 784 \arrow images are $28\times28$ pixels
+        \item 4 hidden layers, each 100 units wide with ReLU activation
+        \item Output layer: multinomial logistic regression, width 10 for digits 0-9
+    \end{itemize}
+    \arrow $N=5$ non-input layers\\
+    \vspace{0.3em}
+    
+    Multinomial logistic regression:\\
+    Affine transformation returns parameters $z_i$ for logistic model:
+    \begin{flalign*}
+        z :=& \k{z}{N} = \k{W}{N} \phi(x; \theta) + \k{b}{N} \\
+        p(c=i) =& \frac{\exp(z_i)}{\sum_{j}\exp(z_j)} =: \text{softmax}(z)_i
+    \end{flalign*}
+
 \end{frame}
 
 \begin{frame}
     \frametitle{Training a MLP to Classify Digits with the MNIST Dataset}
-    
+    MLE cost function:
+    \begin{flalign*}
+        L(x, y; \theta) &= -\log{\p{model}\c{y}{x; \theta}} = -\log*{\text{softmax}(z(x))_y} \\
+        J(\theta) &= \frac{1}{m} \sum_{k=1}^{m} L(x_k, y_k; \theta)
+    \end{flalign*}
+
+    Optimization and Regulation:
+    \begin{itemize}
+        \item SGD using batchsize 20 with Adam optimizer
+        \item Early Stopping
+        \item Dropout with $p=$ and $p=$ for keeping input and hidden nodes
+    \end{itemize}
+
+    Source code: \url{https://github.com/philipobi/seminar}
+
 \end{frame}
 
 \begin{frame}
