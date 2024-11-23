@@ -12,6 +12,8 @@
 \usepackage{xcolor}
 \usepackage{caption}
 \usepackage{pgffor}
+\usepackage[export]{adjustbox}
+\usepackage{url}
 
 \setlength{\parindent}{0pt}
 
@@ -127,13 +129,38 @@
     \begin{flalign*}
         \func{f}{\R^n}{\R^m}, f(x) = y
     \end{flalign*}
-    Common tasks:
-    \begin{itemize}
-        \item Classification
-        \item Regression
-        \item Structured output
-        \item Probability density estimation
-    \end{itemize}
+    Common tasks:\\
+    \vspace{1em}
+    \begin{minipage}{0.4\textwidth}
+        \begin{itemize}
+            \item Classification
+            \item Regression
+        \end{itemize}
+    \end{minipage}    
+    \begin{minipage}{0.55\textwidth}
+        \begin{itemize}
+            \item Structured prediction
+            \item Probability density estimation
+        \end{itemize}
+    \end{minipage}    
+    \vspace{1em}
+    
+    \hspace{-1em}
+    \begin{minipage}[t]{0.59\textwidth}
+        \begin{figure}
+            \includegraphics[height=2.4cm]{img/density_estimation.png}
+            \caption{Density estimate based on samples (red) drawn from a mixed Gaussian (blue) \cite{density_estimation}}
+        \end{figure}
+    \end{minipage}
+    \hspace{0.5em}
+    \begin{minipage}[t]{0.39\textwidth}
+        \begin{figure}
+            \includegraphics[height=2.4cm]{img/structured prediction.pdf}
+            \caption{Sequence tagging as an example of structured prediction \cite{structured_prediction}}
+        \end{figure}
+    \end{minipage}
+    \hspace{-2em}
+
 \end{frame}
 
 \begin{frame}
@@ -144,15 +171,15 @@
         \item Supervised learning: given examples $(x_i, y_i)$, learn $p\c{y}{x}$
         \item Reinforcement learning: learn from interaction with environment
     \end{itemize}
-\end{frame}
-
-\begin{frame}
-    \frametitle{Performance Measure P}
-    Goal: find a function $J(\theta)$ which estimates performance on unseen data and can be optimized well\\
-    \vspace{0.2cm}
-    $J(\theta)$: Cost function\\
-    \vspace{0.2cm}
-    $\theta$: model parameters
+    
+    \begin{figure}
+        \hspace{-2em}
+        $\vcenter{\hbox{\includegraphics[width=0.35\textwidth]{img/unsupervised_learning.png}}}$
+        $\vcenter{\hbox{\includegraphics[width=0.24\textwidth]{img/supervised_learning.png}}}$
+        $\vcenter{\hbox{\includegraphics[width=0.4\textwidth]{img/reinforcement_learning.jpg}}}$
+        \hspace{-2em}
+        \caption{Examples for unsupervised, supervised and reinforcement learning \cite{unsupervised}, \cite{supervised} \cite{reinforcement}}
+    \end{figure}
 \end{frame}
 
 \begin{frame}
@@ -445,16 +472,93 @@
         \foreach \n in {1,...,6}{\only<\n>{\includegraphics[width=5cm]{img/backprop/backprop_\n.pdf}}}
         \caption{Example of Backpropagation through a graph \cite{dag}\textsuperscript{*}}
     \end{figure}
-    \arrow For deep/complex graphs: exponential speedup compared to recomputing all intermediate $\frac{\partial F}{\partial X}$ for each node
+    \arrow Deep/complex graphs: dramatic speedup compared to recomputing all intermediate $\frac{\partial F}{\partial X}$ for each node
 \end{frame}
 
 \begin{frame}
     \frametitle{Backpropagation for MLPs}
     
+    \begin{minipage}{0.4\textwidth}
+        Feedforward:
+        \begin{flalign*}
+            & \k{z}{k} = \k{W}{k} \k{a}{k-1} + \k{b}{k} &&\\ 
+            & \k{a}{k} = \k{g}{k}(\k{z}{k}) &&
+        \end{flalign*}
+    \vspace{0.5cm}\\
+    Backpropagation:\\
+    (let $\br{\frac{\partial u}{\partial v}}_{ij} = \frac{\partial u_j}{\partial v_i}$)    
+    \end{minipage}
+    \begin{minipage}{0.57\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.9 \linewidth, right]{img/dropout/backprop_mlp.pdf}
+            \caption{Visualization of a MLP \cite{dropout}\textsuperscript{*}}
+        \end{figure}
+    \end{minipage}
+    \vspace{-0.3cm}
+    \begin{flalign*}
+        & \frac{\partial L}{\partial \k{z}{k}} = \frac{\partial \k{z}{k+1}}{\partial \k{z}{k}}\frac{\partial L}{\partial \k{z}{k+1}} =  \frac{\partial \k{g}{k}(\k{z}{k})}{\partial\k{z}{k}} {\k{W}{k+1}}^T \frac{\partial L}{\partial \k{z}{k+1}} &&\\
+        & \frac{\partial L}{\partial \k{W}{k}_{ij}} = \frac{\partial L}{\partial \k{z}{k}_i} \k{a}{k-1}_j, \quad \frac{\partial L}{\partial \k{b}{k}_i}
+        = \frac{\partial L}{\partial \k{z}{k}_i} &&
+    \end{flalign*}
+    \arrow During feedforward    store the $\k{z}{k}, \k{a}{k}$, during backprop $\frac{\partial L}{\partial \k{z}{k}}$
 \end{frame}
 
+\begin{frame}
+    \frametitle{Regularization Techniques}
+    
+    \begin{itemize}
+        \item Parameter norm constraints (e.g. $\Omega(\theta) = \norm{\theta}_2$):\\
+        \vspace{0.15cm}
+        implicit: minimize $\tilde{J}(\theta) = J(\theta) + \alpha \Omega(\theta), \quad \alpha \geq 0$ \\
+        \vspace{0.15cm}
+        explicit: project $\theta$ back after gradient step, s.t. $\Omega(\theta) < c$
+        \item Dataset augmentation: generate new examples by transforming existing ones
+        \item Early stopping: stop training as soon as generalization error starts increasing again 
+    \end{itemize}
+    \begin{figure}
+        \hspace{-2em}
+        $\vcenter{\hbox{\includegraphics[width=0.24\textwidth]{img/deep learning/norm_constraint.pdf}}}$
+        $\vcenter{\hbox{\includegraphics[width=0.24\textwidth]{img/deep learning/dataset_augmentation.pdf}}}$
+        $\vcenter{\hbox{\includegraphics[width=0.55\textwidth]{img/deep learning/early_stopping.pdf}}}$
+        \hspace{-2em}
+        \caption{Illustration of parameter norm constraints, dataset augmentation and early stopping \cite{textbook}\textsuperscript{*}}
+    \end{figure}
+\end{frame}
+\begin{frame}
+    \frametitle{Dropout}
+    Train ensemble of all subnetworks of base network:
+    \begin{itemize}
+        \item Randomly remove non-output nodes for each training example
+        \item MLP: $\k{a}{k}_n = \k{\mu}{k}_n \k{g}{k}(\k{z}{k})_n\,, \ \k{\mu}{k}_n$ Bernoulli-distributed
+        \item For non-training inputs return average of ensemble results or
+        equivalently scale outgoing weights by $p(\k{\mu}{k}_n = 1)$
+    \end{itemize}
+    \vspace{-0.5cm}
+    \begin{minipage}{0.49\textwidth}
+        \vspace{0.3cm}
+        Why does it work:
+        \begin{itemize}
+            \item Regularizes nodes to work well in different contexts
+            \item Form of dataset augmentation
+            \arrow create new inputs by injecting noise
+        \end{itemize}
+    \end{minipage}
+    \hspace{1em}
+    \begin{minipage}{0.4\textwidth}
+        \vspace{1cm}
+        \begin{figure}
+            \includegraphics[width=0.8\linewidth]{img/dropout/dropout.pdf}
+            
+            \caption{Subnetwork formed by randomly sampling $\mu$ \cite{dropout}\textsuperscript{*}}
+        \end{figure}
+    \end{minipage}
+\end{frame}
 
-\begin{thebibliography}{9}
+\begin{frame}
+    \frametitle{Convolutional Neural Networks}
+\end{frame}
+
+\begin{thebibliography}{99}
     \bibitem{textbook}
     Goodfellow et al.
     \bibitem{mitchell97}
@@ -464,8 +568,20 @@
     \bibitem{kernel}
     Pham, Trong-Ton. (2010). MODELE DE GRAPHE ET MODELE DE LANGUE POUR LA RECONNAISSANCE DE SCENES VISUELLES.
     \bibitem{arnold}
-    https://ludovicarnold.com/teaching/optimization/gradient-descent/
+    \url{https://ludovicarnold.com/teaching/optimization/gradient-descent/}
     \bibitem{dag}
-    https://commons.wikimedia.org/w/index.php?curid=3211391
+    \url{https://commons.wikimedia.org/w/index.php?curid=3211391}
+    \bibitem{supervised}
+    \url{https://corochann.com/mnist-dataset-introduction-532/}
+    \bibitem{unsupervised}
+    \url{https://cloud.google.com/discover/what-is-unsupervised-learning?hl=en}
+    \bibitem{reinforcement}
+    \url{https://commons.wikimedia.org/w/index.php?curid=141214663}
+    \bibitem{regression}
+    \url{https://www.researchgate.net/figure/Linear-regression-of-firm-level-log-average-loan-amount-y-axis-on-log-total-assets_fig4_339863947}
+    \bibitem{density_estimation}
+    \url{https://commons.wikimedia.org/w/index.php?curid=24309466}
+    \bibitem{structured_prediction}
+    \url{https://en.wikipedia.org/wiki/Structured_prediction}
 \end{thebibliography}
 \end{document}
