@@ -5,15 +5,14 @@
 \usepackage{amsfonts}
 \usepackage{bm}
 \usepackage{relsize}
-\usepackage{float}
-\usepackage{csquotes}
 \usepackage{graphicx}
 \usepackage{dirtytalk}
 \usepackage{xcolor}
 \usepackage{caption}
 \usepackage{pgffor}
 \usepackage[export]{adjustbox}
-\usepackage{url}
+\usepackage{hyperref}
+\usepackage{changepage}
 
 \setlength{\parindent}{0pt}
 
@@ -111,7 +110,7 @@
 \newcommand{\func}[3]{#1:#2\rightarrow#3}
 \newcommand{\p}[1]{p_\text{#1}}
 \renewcommand{\k}[2]{#1^{(#2)}}
-
+\newcommand{\PLH}{{\mkern-2mu\times\mkern-2mu}}
 
 \begin{document}
 \begin{frame}
@@ -184,7 +183,7 @@
 
 \begin{frame}
     \frametitle{Different Types of Error}
-    \begin{figure}[H]
+    \begin{figure}
         \includegraphics[width=0.8\textwidth]{img/deep learning/test_generalization_error.pdf}
         \caption{Typical relationship between capacity and error \cite{textbook}}
     \end{figure}
@@ -311,6 +310,10 @@
                 \smallmin 1,& \smallmin 1,& \smallmin 1,& 1,& 1,& 1
             \end{bsmallmatrix*} \, \k{a}{1} &&
         \end{flalign*}
+
+        
+        \href{https://www.youtube.com/watch?v=Ln8pV1AXAgQ}{\textcolor{blue}{Visualization on YouTube}}
+
     \end{minipage}
     \begin{minipage}[t]{0.4\textwidth}
         \begin{figure}
@@ -555,7 +558,140 @@
 \end{frame}
 
 \begin{frame}
-    \frametitle{Convolutional Neural Networks}
+    \frametitle{Training a MLP to Classify Digits with the MNIST Dataset}
+
+\end{frame}
+
+\begin{frame}
+    \frametitle{Training a MLP to Classify Digits with the MNIST Dataset}
+    
+\end{frame}
+
+\begin{frame}
+    \frametitle{Convolutional Neural Networks (CNNs)}
+    Specialized neural networks for inputs with grid-like topology
+    
+    \begin{minipage}[t]{0.49\textwidth}
+        \vspace{1em}
+        Define convolution operation for CNNs with 2D-inputs as:
+        \begin{equation*}
+            F(i,j) = \sum_{m, n} I(i+m, j+n)K(m,n)
+        \end{equation*}
+        
+        Idea: move the kernel $K$ accross the input $I$ like a window into the array
+    \end{minipage}
+    \begin{minipage}[t]{0.49\textwidth}
+        \begin{figure}
+            \captionsetup{margin={1cm,-0.5cm}}
+            \includegraphics[width=\linewidth]{img/deep learning/2d_conv.pdf}
+            \hspace{-4.5em}
+            \caption{Visualization of convolution with a $2\PLH2$ kernel \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+\end{frame}
+
+\begin{frame}
+    \frametitle{Architecture of a convolutional Layer}
+    {\setlength{\leftmargini}{0cm}
+    \begin{enumerate}
+        \item Compute multiple feature maps $F$ in parallel using different kernels
+        \item Apply element-wise activation to the $\k{F}{k}_{ij}$
+        \item Summarize the activations using a pooling function
+    \end{enumerate}}
+    
+    \vspace{2em}
+    \begin{minipage}[b]{0.52\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.9\linewidth]{img/conv_layer.png}
+            \caption{Composition of a convolutional layer \cite{conv_layer}}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[b]{0.45\textwidth}
+        \begin{figure}
+            \includegraphics[width=0.8\linewidth]{img/deep learning/pooling.pdf}
+            \caption{Max-pooling returns maximum activation in area \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+\end{frame}
+
+\begin{frame}
+    \frametitle{The Reasoning behind CNNs}
+    \hspace{-1em}
+    \begin{minipage}{0.6\textwidth}
+        Practical advantages over MLPs:
+        \begin{itemize}
+            \item Sparse connectivity: not all input and output nodes are connected
+            \item Parameter sharing: kernel parameters reused for each node in a feature map
+            \item Downsampling: fixed-size outputs by adapting stride to input size
+        \end{itemize}
+    \end{minipage}
+    \hspace{0.5em}
+    \begin{minipage}{0.35\textwidth}
+        \vspace{-3em}
+        \begin{figure}
+            \includegraphics[width=0.4\linewidth]{img/deep learning/sparse connectivity_1.pdf}
+            \includegraphics[width=0.4\linewidth]{img/deep learning/sparse connectivity_2.pdf}
+            \hspace{-3em}
+            \captionsetup{margin={2em,-5em}}
+            \caption{Connectivity comparison: convolutional layer with $3\PLH1$ kernel vs. fully connected \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+
+    \arrow Decreased computational cost, increased input-flexibility\\
+    \vspace{2em}
+    
+    \begin{minipage}[b]{0.5\textwidth}
+        \begin{figure}
+            \caption{Max-pooling with stride 2 \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[b]{0.45\textwidth}
+        \begin{figure}
+            \includegraphics[width=\linewidth]{img/deep learning/downsampling.pdf}
+            \hspace{-3em}
+        \end{figure}
+    \end{minipage}
+    
+\end{frame}
+
+
+\begin{frame}
+    \frametitle{The Reasoning behind CNNs}
+    \hspace{-1.5em}
+    \begin{minipage}{0.7\textwidth}
+        Problem-specific arguments:
+        {%
+        \setlength{\leftmarginii}{1em}
+        \begin{itemize}
+            \item Feature-extraction often only needs local information
+            \item Introduction of invariances by pooling and parameter sharing
+            \item Biological analogy: visual cortex
+            \begin{itemize}
+                \item Two-dimensional structure, mirroring image
+                \item Cell activity influenced only by localized receptive field
+                \item Deeper brain layers extract increasingly complex features using the same structure
+            \end{itemize}
+        \end{itemize}}
+    \end{minipage}
+    \hspace{1em}
+    \begin{minipage}{0.2\textwidth}
+        \vspace{-2em}
+        \begin{figure}
+            \includegraphics[width=1.5\linewidth]{img/deep learning/pooling_invariance.pdf}
+            \hspace{-10em}
+            \captionsetup{margin={1em,-5em}}
+            \vspace{-1em}
+            \caption{Invariance by pooling feature maps responding to different orientations \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[b]{0.49\textwidth}
+        \begin{figure}
+            \caption{Edge detection only needs local information ($K = \brr{- 1, 1}$) \cite{textbook}}
+        \end{figure}
+    \end{minipage}
+    \begin{minipage}[b]{0.49\textwidth}
+        \includegraphics[width=0.9\linewidth]{img/deep learning/edge_detection.pdf}
+    \end{minipage}
 \end{frame}
 
 \begin{thebibliography}{99}
@@ -577,11 +713,13 @@
     \url{https://cloud.google.com/discover/what-is-unsupervised-learning?hl=en}
     \bibitem{reinforcement}
     \url{https://commons.wikimedia.org/w/index.php?curid=141214663}
-    \bibitem{regression}
-    \url{https://www.researchgate.net/figure/Linear-regression-of-firm-level-log-average-loan-amount-y-axis-on-log-total-assets_fig4_339863947}
     \bibitem{density_estimation}
     \url{https://commons.wikimedia.org/w/index.php?curid=24309466}
     \bibitem{structured_prediction}
     \url{https://en.wikipedia.org/wiki/Structured_prediction}
+    \bibitem{conv_layer}
+    \url{https://adeshpande3.github.io/A-Beginner%27s-Guide-To-Understanding-Convolutional-Neural-Networks/}
+    \bibitem{relu_uat}
+    \url{https://www.youtube.com/watch?v=Ln8pV1AXAgQ}
 \end{thebibliography}
 \end{document}
