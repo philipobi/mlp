@@ -2,6 +2,100 @@ import numpy as np
 from utils import Activation, ReLU, Softmax, Adam
 
 
+class MLogit:
+    class Logloss:
+        def init_training(self, output_shape):
+            self.setlen = output_shape[-2]
+            self.index = np.arange(self.setlen)
+            self.temp = np.empty(output_shape[:-1])
+            self.temp1 = np.empty_like(self.temp)
+            self.temp2 = np.empty(output_shape)
+
+        def cleanup_training(self):
+            self.setlen = None
+            self.index = None
+            self.temp = None
+            self.temp1 = None
+            self.temp2 = None
+
+        def get_loss(self, Z, Y, out=None):
+            np.max(Z, axis=-1, out=self.temp)
+            np.subtract(Z, np.reshape(self.temp, (*self.temp.shape, 1)), out=self.temp2)
+            np.exp(self.temp2, out=self.temp2)
+            np.sum(self.temp2, axis=-1, out=self.temp1)
+            np.log(self.temp1, out=self.temp1)
+            np.add(self.temp, self.temp1, out=self.temp)
+            np.subtract(self.temp, Z[..., self.index, Y], out=self.temp)
+
+            if out is not None:
+                np.sum(self.temp, axis=-1, out=out)
+                np.divide(out, self.setlen, out=out)
+            else:
+                return np.sum(self.temp, axis=-1) / self.setlen
+
+        def compute_dJdZ(self, Y_, Y, out):
+            np.copyto(src=Y_, dst=out)
+            out[self.index, Y] -= 1
+
+    class Accuracy:
+        def init_training(self, output_shape):
+            self.temp = np.empty(output_shape[:-1], dtype=int)
+
+        def cleanup_training(self):
+            self.temp = None
+
+        def get_accuracy(self, Y_, Y):
+            np.argmax(Y_, axis=-1, out=self.temp)
+            np.equal(Y, self.temp, out=self.temp)
+            return np.average(self.temp)
+
+    activation = Softmax
+
+    def __init__(self, output_layer):
+        self.output_layer = output_layer
+        self.train_loss = self.Logloss()
+        self.train_accuracy = self.Accuracy()
+        self.val_loss = self.Logloss()
+        self.val_accuracy = self.Accuracy()
+
+    def init_training(self, minibatch_output, valset_output):
+        self.train_loss.init_training(minibatch_output)
+        self.train_accuracy.init_training(minibatch_output)
+        self.val_loss.init_training(valset_output)
+        self.val_accuracy.init_training(valset_output)
+
+    def cleanup_training(self):
+        self.train_loss.cleanup_training()
+        self.train_accuracy.cleanup_training()
+        self.val_loss.cleanup_training()
+        self.val_accuracy.cleanup_training()
+
+    def compute_dJdZ(self):
+        self.train_loss.compute_dJdZ(
+            Y_=self.output_layer.A, Y=self.output_layer.Y, out=self.output_layer.dJdZ
+        )
+
+    @property
+    def training_loss(self):
+        return self.train_loss.get_loss(Y=self.output_layer.Y, Z=self.output_layer.Z)
+
+    @property
+    def training_accuracy(self):
+        return self.train_accuracy.get_accuracy(
+            Y_=self.output_layer.A, Y=self.output_layer.Y
+        )
+
+    @property
+    def valset_loss(self):
+        return self.val_loss.get_loss(Y=self.output_layer.Y, Z=self.output_layer.Z)
+
+    @property
+    def valset_accuracy(self):
+        return self.val_accuracy.get_accuracy(
+            Y_=self.output_layer.A, Y=self.output_layer.Y
+        )
+
+
 class LayerBase:
     rng = None
     dropout = None
@@ -27,6 +121,7 @@ class LayerDroppable(LayerBase):
         super().__init__(width)
         self.p_dropout = None
         self.feedforward = self._feedforward
+        self._ff_toggle = self._feedforward_dropout
 
     def _feedforward(self):
         pass
@@ -34,33 +129,20 @@ class LayerDroppable(LayerBase):
     def _feedforward_dropout(self):
         pass
 
-    def init_training(self, batchsize):
-        if self.dropout.enabled:
-            self.init_dropout(batchsize)
-
-    def cleanup_training(self):
-        if self.dropout.enabled:
-            self.cleanup_dropout()
-
     def init_dropout(self, batchsize):
         self.dropout_mask = lambda: self.rng.binomial(
             n=1, p=self.p_dropout, size=(batchsize, self.width)
         )
-        self.feedforward = self._feedforward_dropout
-        self._ff_toggle = self._feedforward
 
-    def cleanup_dropout(self):
-        self.toggle_dropout_off()
-
-    def toggle_dropout_off(self):
+    def rescale_weights_dropout(self):
         np.multiply(self.child.W, self.p_dropout, out=self.child.W_s)
-        np.multiply(self.child.b, self.p_dropout, out=self.child.b_s)
-        self.toggle_dropout()
 
     def toggle_dropout(self):
         (self.child.W, self.child.W_s) = (self.child.W_s, self.child.W)
-        (self.child.b, self.child.b_s) = (self.child.b_s, self.child.b)
         (self.feedforward, self._ff_toggle) = (self._ff_toggle, self.feedforward)
+
+    def cleanup_dropout(self):
+        self.dropout_mask = None
 
 
 class Layer(LayerDroppable):
@@ -69,8 +151,6 @@ class Layer(LayerDroppable):
         self.activation = activation
 
         self.batchsize = None
-        self.Z = None
-        self.A = None
         self.dsdZ = None
         self.dJdZ = None
         self.dJdWn = None
@@ -78,10 +158,13 @@ class Layer(LayerDroppable):
         self.dJdbn = None
         self.dJdb = None
         self.dZdA = None
-        self.temp = None
 
         self.W = None
         self.b = None
+
+        self.A = None
+        self.Z = None
+        self.temp = None
 
         self.A_ = None
         self.Z_ = None
@@ -91,57 +174,55 @@ class Layer(LayerDroppable):
         self.W_s = None
         self.b_s = None
 
-    def prepend(self, layer):
-        super().prepend(layer)
-        self.init_params()
-
     def init_params(self):
         n, m = (self.parent.width, self.width)
         a = np.sqrt(6 / (m + n))
         self.W = self.rng.uniform(low=-a, high=a, size=(n, m))
         self.b = np.zeros(m)
 
-    def init_training(self, batchsize):
-        super().init_training(batchsize)
-        self.batchsize = batchsize
-        self.Z = np.empty((batchsize, self.width))
-        self.A = np.empty_like(self.Z)
-        self.dsdZ = self.Z
-        self.dJdZ = np.empty_like(self.Z)
-        self.dJdWn = np.empty((batchsize, *self.W.shape))
-        self.dJdW = np.empty_like(self.W)
-        self.dJdbn = self.dJdZ
-        self.dJdb = np.empty(self.width)
-        self.dZdA = self.W.T
-        self.temp = np.empty(batchsize)
+    def prepend(self, layer):
+        super().prepend(layer)
+        self.init_params()
 
     def init_feedforward(self, size):
         self.A_ = np.empty((size, self.width))
         self.Z_ = np.empty_like(self.A_)
         self.temp_ = np.empty(size)
 
-    def cleanup_feedforward(self):
-        self.A_ = None
-        self.Z_ = None
-        self.temp_ = None
-
     def toggle_feedforward(self):
         (self.A, self.A_) = (self.A_, self.A)
         (self.Z, self.Z_) = (self.Z_, self.Z)
         (self.temp, self.temp_) = (self.temp_, self.temp)
 
-    def init_dropout(self, batchsize):
-        super().init_dropout(batchsize)
-        self.p_dropout = self.dropout.p_hidden
-        self.W_s = np.copy(self.W)
-        self.b_s = np.empty_like(self.b)
+    def cleanup_feedforward(self):
+        self.A_ = None
+        self.Z_ = None
+        self.temp_ = None
+
+    def init_training(self, batchsize):
+        self.batchsize = batchsize
+
+        # init A,Z,temp
+        self.init_feedforward(self.batchsize)
+        self.toggle_feedforward()
+
+        self.dsdZ = np.empty_like(self.Z)
+        self.dJdZ = np.empty_like(self.Z)
+        self.dJdWn = np.empty((batchsize, *self.W.shape))
+        self.dJdW = np.empty_like(self.W)
+        self.dJdbn = self.dJdZ
+        self.dJdb = np.empty(self.width)
+        self.dZdA = self.W.T
 
     def cleanup_training(self):
-        super().cleanup_training()
-
         self.batchsize = None
-        self.Z = None
-        self.A = None
+
+        # free all A,Z,temp
+        self.toggle_feedforward()
+        self.cleanup_feedforward()
+        self.toggle_feedforward()
+        self.cleanup_feedforward()
+
         self.dsdZ = None
         self.dJdZ = None
         self.dJdWn = None
@@ -149,13 +230,15 @@ class Layer(LayerDroppable):
         self.dJdbn = None
         self.dJdb = None
         self.dZdA = None
-        self.temp = None
+
+    def init_dropout(self, batchsize):
+        super().init_dropout(batchsize)
+        self.p_dropout = self.dropout.p_hidden
+        self.W_s = np.copy(self.W)
 
     def cleanup_dropout(self):
         super().cleanup_dropout()
-
         self.W_s = None
-        self.b_s = None
         self.p_dropout = None
 
     def _feedforward(self):
@@ -175,7 +258,7 @@ class Layer(LayerDroppable):
     def backprop(self):
         self._compute_dJdZ()
         np.multiply(
-            self.parent.A[:, :, np.newaxis], self.dJdZ[:, np.newaxis, :], out=self.dJdWn
+            self.parent.A[..., np.newaxis], self.dJdZ[:, np.newaxis, :], out=self.dJdWn
         )
         np.sum(self.dJdWn, axis=0, out=self.dJdW)
         np.divide(self.dJdW, self.batchsize, out=self.dJdW)
@@ -190,26 +273,32 @@ class InputLayer(LayerDroppable):
         self.A = None
         self.A_ = None
 
+    def init_feedforward(self, size):
+        self.A_ = np.empty((size, self.width))
+
+    def toggle_feedforward(self):
+        (self.A, self.A_) = (self.A_, self.A)
+
+    def cleanup_feedforward(self):
+        self.A_ = None
+
     def init_training(self, batchsize):
-        super().init_training(batchsize)
-        self.A = np.empty((batchsize, self.width))
+        self.init_feedforward(batchsize)
+        self.toggle_feedforward()
+
+    def cleanup_training(self):
+        self.toggle_feedforward()
+        self.cleanup_feedforward()
+        self.toggle_feedforward()
+        self.cleanup_feedforward()
 
     def init_dropout(self, batchsize):
         super().init_dropout(batchsize)
         self.p_dropout = self.dropout.p_input
 
-    def cleanup_training(self):
-        super().cleanup_training()
-        self.A = None
-
-    def init_feedforward(self, size):
-        self.A_ = np.empty((size, self.width))
-
-    def cleanup_feedforward(self):
-        self.A_ = None
-
-    def toggle_feedforward(self):
-        (self.A, self.A_) = (self.A_, self.A)
+    def cleanup_dropout(self):
+        super().cleanup_dropout()
+        self.p_dropout = None
 
     def _feedforward(self):
         np.copyto(src=self.X, dst=self.A)
@@ -228,21 +317,19 @@ class OutputLayer(Layer):
 
     def config(self, activation, compute_dJdZ):
         self.activation = activation
-        self._compute_dJdZ = lambda: compute_dJdZ(self)
+        self._compute_dJdZ = compute_dJdZ
 
-    def init_dropout(self, batchsize):
+    def init_dropout(self, _):
         self.W_s = np.copy(self.W)
-        self.b_s = np.empty_like(self.b)
+
+    def rescale_weights_dropout(self):
+        pass
 
     def toggle_dropout(self):
         pass
 
-    def toggle_dropout_off(self):
-        pass
-
     def cleanup_dropout(self):
         self.W_s = None
-        self.b_s = None
 
 
 class DropoutConfigDefault:
@@ -252,7 +339,9 @@ class DropoutConfigDefault:
 
 
 class MLP:
-    def __init__(self, layers, model, optimizer=Adam(), dropout=DropoutConfigDefault):
+    def __init__(
+        self, layers, model=MLogit, optimizer=Adam(), dropout=DropoutConfigDefault
+    ):
         self.dropout = dropout
         LayerBase.rng = np.random.default_rng(seed=12345)
         LayerDroppable.dropout = dropout
@@ -260,7 +349,8 @@ class MLP:
         self.layers = layers
         self.input_layer = self.layers[0]
         self.output_layer = self.layers[-1]
-        self.model = model
+
+        self.model = model(self.output_layer)
         self.optimizer = optimizer
 
         self.output_layer.config(
@@ -277,79 +367,91 @@ class MLP:
             layer.init_feedforward(1)
             layer.toggle_feedforward()
 
-    def init_training(self, batchsize, validation_set=None):
+    def init_training(self, batchsize, validation_set):
         self.validation_set = validation_set
 
         for layer in self.layers:
             # initialize layers to accept batches
-            layer.toggle_feedforward()
             layer.init_training(batchsize)
 
         # initialize layers to accept inputs of size of
-        # validation set on their alternative buffers
-        if self.validation_set is not None:
-            X, Y = self.validation_set
-            N, _ = X.shape
-            for layer in self.layers:
-                layer.init_feedforward(N)
+        # validation set on their alternative arrays
+        X, _ = self.validation_set
+        valsetsize, _ = X.shape
+        for layer in self.layers:
+            layer.init_feedforward(valsetsize)
 
-        self.model.init_training(batchsize, validation_set, self.output_layer)
+        self.model.init_training(
+            minibatch_output=(batchsize, self.output_layer.width),
+            valset_output=(valsetsize, self.output_layer.width),
+        )
+
         self.optimizer.init_training(self.layers[1:])
+
+        # initialize dropout
+        if self.dropout.enabled:
+            for layer in self.layers:
+                layer.init_dropout(batchsize)
 
     def cleanup_training(self):
         for layer in self.layers:
             layer.cleanup_training()
-            layer.cleanup_feedforward()
             # initialize layers to accept single examples again
             layer.init_feedforward(1)
             layer.toggle_feedforward()
+            layer.cleanup_dropout()
 
     def train_minibatch(self, minibatch):
+        # train
+        if self.dropout.enabled:
+            for layer in self.layers:
+                layer.toggle_dropout()
+
         X, Y = minibatch
         self._feedforward(X)
-        self.model.outputs = (self.output_layer.Z, self.output_layer.A, Y)
+        self.output_layer.Y = Y
+
+        training_loss = self.model.training_loss
+        training_accuracy = self.model.training_accuracy
 
         layer = self.output_layer
         while layer:
             layer.backprop()
             layer = layer.parent
-
         self.optimizer.update_params()
 
-        if self.validation_set is not None:
-            X, Y = self.validation_set
-
-            # switch to alternative buffers
+        if self.dropout.enabled:
             for layer in self.layers:
-                layer.toggle_feedforward()
+                layer.rescale_weights_dropout()
+                layer.toggle_dropout()
 
-            if self.dropout.enabled:
-                for layer in self.layers:
-                    layer.toggle_dropout_off()
+        # validate
+        X, Y = self.validation_set
+        # switch array pointers
+        for layer in self.layers:
+            layer.toggle_feedforward()
 
-            self._feedforward(X)
+        self._feedforward(X)
+        self.output_layer.Y = Y
 
-            self.model.outputs = (self.output_layer.Z, self.output_layer.A, Y)
+        validation_loss = self.model.valset_loss
+        validation_accuracy = self.model.valset_accuracy
 
-            if self.dropout.enabled:
-                for layer in self.layers:
-                    layer.toggle_dropout()
+        # switch back array pointers
+        for layer in self.layers:
+            layer.toggle_feedforward()
 
-            # switch back to main buffers
-            for layer in self.layers:
-                layer.toggle_feedforward()
-
-            return (self.model.loss, self.model.accuracy)
+        return (training_loss, training_accuracy, validation_loss, validation_accuracy)
 
     def _feedforward(self, X):
         layer = self.input_layer
         layer.X = X
-
         while layer:
             layer.feedforward()
             layer = layer.child
 
     def feedforward(self, x):
+
         layer = self.input_layer
         layer.A = x
         layer = layer.child
@@ -359,46 +461,43 @@ class MLP:
         return np.argmax(self.output_layer.A)
 
 
-class MultinoulliML:
-    activation = Softmax
+class ParameterAxis:
+    def __init__(self, layer_i, type, pos, d, N):
+        self.range = None
+        self.layer_i = layer_i
 
-    def __init__(self):
-        self.outputs = (None, None)
+        self.d = d
+        self.N = N
+        self.update_range()
 
-    def init_training(self, batchsize, validation_set, output_layer):
-        self.batchsize = batchsize
-        self.index = np.arange(batchsize)
-        if validation_set is not None:
-            X, _ = validation_set
-            self.valsetsize, _ = X.shape
-
-            self.index_ = np.arange(self.valsetsize)
-            self.loss_ = np.empty(self.valsetsize)
-            self.temp1_ = np.empty_like(self.loss_)
-            self.temp2_ = np.empty(self.valsetsize, dtype=int)
-
-            self.temp_ = np.empty((self.valsetsize, output_layer.width))
-
-    def compute_dJdZ(self, output_layer):
-        _, Y_, Y = self.outputs
-        np.copyto(src=Y_, dst=output_layer.dJdZ)
-        output_layer.dJdZ[self.index, Y] -= 1
+    def update_range(self):
+        val = self.value
+        self.range = np.linspace(val - self.d, val + self.d, num=self.N)
 
     @property
-    def loss(self):
-        Z, _, Y = self.outputs
-        np.max(Z, axis=-1, out=self.loss_)
-        np.subtract(Z, self.loss_[:, np.newaxis], out=self.temp_)
-        np.exp(self.temp_, out=self.temp_)
-        np.sum(self.temp_, axis=-1, out=self.temp1_)
-        np.log(self.temp1_, out=self.temp1_)
-        np.subtract(self.loss_, Z[self.index_, Y], out=self.loss_)
-        np.add(self.loss_, self.temp1_, out=self.loss_)
-        return np.sum(self.loss_) / self.valsetsize
+    def in_range(self):
+        val = self.value
+        return self.range.min() < val and val < self.range.max()
 
     @property
-    def accuracy(self):
-        _, Y_, Y = self.outputs
-        np.argmax(Y_, axis=-1, out=self.temp2_)
-        np.equal(self.temp2_, Y, out=self.temp2_)
-        return np.average(self.temp2_)
+    def value(self):
+        return self._get_value()
+
+
+class LayerGrid:
+    def __init__(self, layer, axes):
+        self.W_ = np.copy(layer.W)
+        self.b_ = np.copy(layer.b)
+
+        self.axes = axes
+
+
+class ParameterGrid:
+    def init_axis(p):
+        (layer_i, t, pos, d, N) = p
+
+    def __init__(self, p1, p2, mlp: MLP):
+        self.layers = [
+            (np.copy(layer.W), np.copy(layer.b), layer.activation)
+            for layer in mlp.layers[1:]
+        ]
