@@ -103,6 +103,293 @@
 \renewcommand{\k}[2]{#1^{(#2)}}
 
 \begin{document}
+
+\subsection*{Broad Definition of Machine Learning}
+\begin{itemize}
+    \item would like to start with broad definition of machine learning:
+\end{itemize}
+
+\subsection*{Types of tasks T}
+\begin{itemize}
+    \item for the tasks:
+    \item generally, want to approximate some highly complex function
+    \item common tasks include
+    \item classification: produce vector of probabilities of input belonging to certain classes
+    \item regression: predict numerical value given some input
+    \item structured prediction: important relationships between elements input as well as output vector
+    \item e.g. tagging a sentence \arrow vector of words
+    \item explicitly learn probability function set of inputs
+    \item e.g. image: density estimate based on samples drawn from mixed gaussian
+    \item most above taskss already implicitly learn structure/parameters of underlying distribution
+\end{itemize}
+
+\subsection*{Types of experience E}
+\begin{itemize}
+    \item in most cases, algorithm gains experience by observing examples
+    \item tasks usually described in terms of how to process a example
+    \item learning can roughly be divided into:
+    \item unsupervised learning: learn properties of dataset, e.g. estimate probability distribution or cluster data
+    \item supervised learning: experience dataset of examples with labels
+    \item learn to estimate $p\c{y}{x}$, e.g. probability of label 5 given pixel vector 5
+    \item reinforcement learning: learn through feedback loop between system and environment
+    \item example: parts of full-self-driving
+\end{itemize}
+
+\subsection*{Different Types of Error}
+\begin{itemize}
+    \item to measure models performance, we can use different types of error
+    \item training error: error the model makes on the set used for training
+    \item generalization error: error the model makes on data it hasnt been trained on \arrow error in real world scenario
+    \item errors usually change with model capacity
+    \item capacity: ability of model to fit many different functions
+    \item underfitting: model cant lower training error enough, can be caused by capacity too low for task at hand
+    \item overfitting: large gap between generalization and test error
+    \item can because by too high capacity, model "memorizes" training set or has too many parameters/degrees of freedom
+    \item what differentiates machine learning from simple optimization: goal is low training and more importantly low generalization error
+\end{itemize}
+
+\subsection*{Deep Learning and Neural Networks}
+\begin{itemize}
+    \item for deep learning and neural networks, first some terminology
+    \item called networks because learned function can be described by network of nodes
+    \item term neural used because graph nodes have similar functionality to biological neurons in that they are interconnected and propagate information/activations
+    \item called deep learning because graphs usually have considerable depth
+    \item depth/width: length in/orthogonal to propagation direction
+\end{itemize}
+
+\subsection*{Deep Feedforward Networks}
+\begin{itemize}
+    \item Deep feedforward networks, also known as multilayer perceptrons
+    \item Quintessential deep learning models
+    \item Typically have layer structure
+    \item Activations in layer are vector
+    \item propagation by matrix-multiplication with weight and addition of bias and application of an activation function
+    \item distinguish between input layer, output layer and hidden layers
+    \item hidden because we do not explicitly specify what we want this layer to do
+\end{itemize}
+
+\subsection*{How does Deep Learning Work}
+\begin{itemize}
+    \item Several reasons to why deep learning works
+    \item Most intuitive: build complex representations of objects / complex tasks out of simpler units
+    \item e.g. for recognizing items in image
+    \item input represented as pixels
+    \item as we progress to deeper layers extract edges, then contours, object parts and finally object identity
+\end{itemize}
+
+\subsection*{Deep Learning as Extension of Linear Models}
+\begin{itemize}
+    \item more formally, deep learning can be seen as extension of linear models
+    \item hidden layers form a kernel, output layer performs some kind of regression, e.g. linear regression to separate two input classes
+    \item kernel maps from input space, where inputs not linearly separable to high-dimensional space, where problem becomes separable
+    \item applying kernel can be seen as extracting features from input or introducing a new representation of the input
+    \item deep learning: learn the regression parameters as well as the parameters defining the kernel function
+\end{itemize}
+
+\subsection*{Universal Approximation Theorems}
+\begin{itemize}
+    \item universal approximation theorems also give us arguments for why neural networks are successful at learning complex functions
+    \item they prove that it is possible to approximate functions arbitrarily well provided the neural network is large enough
+    \item one of the requirements for this to work is non-linearity, which we mostly introduce using activation functions such as ReLU
+    \item in fact, one can show that network with one hidden layer and e.g. ReLU activation is universal approximator
+    \item Caveat: may require number of hidden units exponential to input size
+    \item example: approximation of polynomial with 6 nodes using ReLU activation on interval -2, 2
+\end{itemize}
+    
+\subsection*{Shallow Network with ReLU as Universal Approximator}
+\begin{itemize}
+    \item claim: this function approximates the polynomial
+    \item illustration: see desmos
+    \item now that we have seen, how the relus approximate, what is the connection to neural networks?
+    \item We can also represent the above like so
+    \item this corresponds to neural network with 6 hidden units and linear output
+    \item also visualization of this on youtube, which inspired me to use this example
+\end{itemize}
+
+\subsection*{UAT - Intuition for Advantage of Deeper Networks}
+\begin{itemize}
+    \item what are advantages of using deeper networks?
+    \item geometric intuition for this using absolute value rectification as activation
+    \item layer weights and biases define a hyperplane along which the absolute value folds space
+    \item using many hidden layers in a row creates complex pattern of folds on input space
+    \item computing a function on the folded space leads to a function with complex symmetries being computed on the input space
+    \item by using layers we can carve out exponentially many linear regions in the input space, fixing the issue of possibly needing exponentially many hidden units for shallow network
+    
+    \item one detail is important: uat only guarantees that model has ability to approximate function, does not guarantee that function can be learned
+\end{itemize}
+
+\subsection*{Maximum Likelihood Estimator 1}
+\begin{itemize}
+    \item to go more into detail how model learns function, introduce the maximum likelihood estimator
+    \item important things we need for this:
+    \item empirical distribution: puts probability mass 1/m on every observed example
+    \item kullback-leibler divergence
+    \item measure how different distributions $p$ and $q$ over same random variable are
+    \item positive semidefinite, 0 for both distributions equal
+    \item concept of distance between distributions
+    \item minimizing over $q$ selects function that places high probability everywhere $p$ has high probability
+    \item as seen here where $p$ is mixture of two gaussians and $q$ has to be single gaussian
+\end{itemize}
+
+\subsection*{Maximum Likelihood Estimator 2}
+\begin{itemize}
+    \item prerequisites for defining ml-estimator
+    \item i.i.d. assumption: view all examples as being indepentent and identically distributed
+    \item individual examples can be seen as drawn from data-generating distribution p data
+    \item p model family of probability distributions
+    \item p data m empirical distribution defined by examples in X, approximation of real p data
+    \item define the maximum likelihood estimator for $\theta$ as:
+    \item applying logarithm and using definition of kl divergence we get
+\end{itemize}
+
+\subsection*{Maximum Likelihood Estimator 3}
+\begin{itemize}
+    \item ml estimator has the following properties
+    \item as we saw, minimizes dissimilarity between observed distribution and model distribution by minimizing kl-divergence
+    \item If real data-generating distribution is one of this index family with parameter $\theta^*$ then ml estimator shows fastest convergence with increasing m
+    \item can generalize concept to conditional probabilities
+    \item connection between MLE and UAT:
+    \item MLE is framework for optimizing model parameters to fit the probability distribution model learns to the real distribution
+    \item UAT guarantees that model has capacity to approximate real distribution
+    \item above properties make ML-Estimation preferred parameter estimator in machine learning
+\end{itemize}
+
+\subsection*{Cost Functions and Gradient Descent}
+\begin{itemize}
+    \item for finding the optimal parameters we need some cost function we can minimize
+    \item cost functions often sum over per example loss
+    \item MLE makes it easy because optimal parameter is already defined via sum of per-example losses
+    \item this form of per-example loss known as log-loss
+    \item since gradient always points in direction of steepest ascent can, iteratively minimize by taking small steps in opposite direction
+    \item problem: computational cost of one iteration proportional to number of examples, which tend to be very large to get good fit
+\end{itemize}
+
+\subsection*{Stochastic Gradient Descent and Momentum}
+\begin{itemize}
+    \item this is where stochastic gradient descent comes in
+    \item compute estimate for gradient by using much smaller number of randomly drawn examples
+    \item so called minibatch
+    \item another problem is that gradient descent can tend to show oscillatory pattern if strong difference in steepness
+    \item one solution can be using momentum
+    \item computes a exponentially decaying weighted average of gradient this stabilizes the gradient descent
+    \item particle moving in potential with friction
+\end{itemize}
+
+\subsection*{Backpropagation - General Formulation}
+\begin{itemize}
+    \item To compute the gradient of cost function we make use of backpropagation
+    \item Very generally, it is algorithm for computing partial derivatives with respect to nodes in computational graph
+    \item efficiently using the chain rule
+    \item Start at last node
+    \item propagate backwards along graph, re-using partial derivatives of previous nodes
+    \item e.g. partial derivative of F with respect to C can reuse partial derivative with respect to E etc.
+    \item benefit especially for deep or complex graphs: dramatically speeds up computation compared to recomputing intermediate derivatives
+    \item also, memory savings: we can throw away the partial derivatives of earlier nodes if no more reference later and we have processed the value, e.g. remove dFdC after dFdB
+\end{itemize}
+
+\subsection*{Backpropagation form MLPs}
+\begin{itemize}
+    \item Due to usage of matrices and vectors in MLPs, backpropagation can be formulated more straightforward
+    \item main backpropagation step is reusing previous dL/dz
+    \item using this, we can then get the derivatives with respect to weights and biases
+    \item important: store the z, a along the way during feedforward and the dL/dz during backpropagation
+\end{itemize}
+
+\subsection*{Regularization Techniques}
+\begin{itemize}
+    \item To avoid overfitting, we use regularization techniques
+    \item examples are
+    \item parameter norm constraints where Omega is in some way a measure of the capacity of the model
+    \item implicit constraint by minimizing regularized cost function with norm penalty
+    \item explicit: perform gradient step, if theta violates constraint after, project it back into the constraint area
+    \item Constraints restrict area in parameter space that can be chosen by model
+    \item Dataset augmentation: best way to improve generalization is use more examples
+    \item generate new examples by transforming existing ones, e.g. translating or rotating images etc.
+    \item very easy regularization technique: stop training as soon as overfitting starts to occur, i.e. generalization error starts increasing again
+\end{itemize}
+
+\subsection*{Dropout}
+\begin{itemize}
+    \item Dropout technique trains ensemble of networks, specifically ensemble of all subnetworks of base network
+    \item does that by randomly removing non-output nodes from base network for each training example
+    \item for MLPs that is as easy as sampling mask from bernoulli-distribution and applying it to the activations during feedforward
+    \item during inference, i.e. for processing real world input with network need to return average of all results in the ensemble, can be numerically non-feasible
+    \item experimentally shown that this is same as using full base network and scaling down outgoing weights with probability of the node being included
+    \item intuitive explanation: make sure that expected input at test time is same as during training and not too high
+    \item why does this technique work:
+    \item regularizes nodes to work well in different contexts, e.g. if other nodes are randomly missing
+    \item can be seen as form of dataset augmentation, essentially creating new inputs by injecting noise into the network in form of the masks 
+\end{itemize}
+
+\subsection*{Convolutional Neural Networks}
+\begin{itemize}
+    \item final topic: introduce convolutional neural networks
+    \item specialized neural networks for inputs with grid structure, most notably images 
+    \item for discrete, finite-sized, 2D inputs such as images, we define the convolution operation as such
+    \item this is formally cross-correlation but for most aspects of CNNs this doesnt matter and more convenient than minus in convolution
+    \item Example output after convolving I input with 2x2-kernel K
+    \item Intuition for operation: move kernel across input like window in array and perform element-wise multiplication and summation at each position
+\end{itemize}
+
+\subsection*{Architecture of a convolutional layer}
+\begin{itemize}
+    \item Convolutional layers mostly have the following architecture
+    \item First compute multiple feature maps F in parallel using different kernels
+    \item Idea: each kernel will respond to different kind of feature in the input
+    \item Then apply element-wise activation to the feature-maps
+    \item Finally, pool the activations in the feature maps, performing some kind of summarization of the previously detected features
+    \item example: max pooling - for each unit, return the maximum activation in neighbourhood of fixed size
+\end{itemize}
+
+\subsection*{Reasoning behind CNNs 1}
+\begin{itemize}
+    \item Why use convolutional layers over fully connected layers in MLPs?
+    \item firstly, sparse connectivity: not nodes between layers are connected
+    \item e.g. kernel of size 3 always connects 3 input nodes to 1 output node, compared to fully connected where all input connected to all output
+    \item parameter sharing: the same kernel is used for the entire convolution, compared to mlp where each input node has its own parameters connecting it to output nodes 
+    \item Downsampling: we can realize fixed size outputs by adapting stride of our operations to the size of the input, e.g. use bigger stride for larger inputs downsample the output
+    \item why these things are advantageous, can be seen especially for image processing:
+    \item images are typically several million pixels in size, that would imply order of million weights for first layer alone, arithmetic operations on similar order of magnitude
+    \item image dimensions are generally very varied, MLPs can only deal with fixed input size
+\end{itemize}
+
+\subsection*{Reasoning behind CNNs 2}
+\begin{itemize}
+    \item there are also problem-specific arguments for use of CNNs for processing grid-like data
+    \item features in grid-like data can often be extracted with only knowledge of local structure \arrow analogy to kernel working like a window
+    \item for example, edge information can be extracted using small kernel that computes difference in brightess of two neighboring pixels
+    \item by pooling an parameter sharing, we can explicitly of implicitly introduce invariances to our model
+    \item e.g. pooling across outputs of different kernels that each respond to different orientation of number 5 introduces invariance to rotation of input
+    \item also, we do not necessarily care where in grid feature occurs, which gives further argument for using same kernel across entire image
+    \item Finally, for image processing we can draw biological analogy with visual cortex in mammals
+    \item Similar to feature maps, it has two dimensional structure and images in retina are spatially mapped to simple cells in visual cortex
+    \item Cell activity here is only influenced by a locally receptive field, similar to kernel only connecting several input nodes to one output node
+    \item Also, it is assumed that further layers in image processing pipeline in brain extract increasingly complex features using the same structure as this first layer
+    \item This inspired the creation of CNNs and is probably the most successful example machine learning inspired by neurobiology
+\end{itemize}
+
+\subsection*{MNIST 1 }
+\begin{itemize}
+    \item Finally for the programming part of my seminar topic:
+    \item Programmed MLP using numpy to learn to classify digits using MNIST dataset
+    \item Chose the following model architecture ...
+    \item Multinomial logistic regression compsed of following steps
+    \item Hidden layers form kernel extracting features
+    \item Followed by affine transformation which returns logistic units, e.g. parameters for the logistic model
+    \item the logistic model then defines the probability of the input being of class i, in our case, the image being digit i as
+\end{itemize}
+
+\subsection*{MNIST 2}
+\begin{itemize}
+    \item this probability is our p model, then the ML per-example loss can be readily defined like so, which immediately gives us the cost function
+    \item For optimization used Stochastic gradient descent with bacthsize 20 and the Adam optimizer
+    \item In some sense, improvement upon the Momentum based gradient descent mentioned earlier
+    \item To regularize early stopping and dropout
+\end{itemize}
+
+\newpage
+
+
 \section{Definitions}
 \subsection{Definition of Machine Learning}
 Broad definition of machine learning: \\
@@ -811,5 +1098,6 @@ Kernel parameters are reused for each output node, compared to MLP where each no
 Research shows that primary visual cortex in mammals is arranged in spatial map \\
 has two-dimensional structure, mirroring structure of image in retina \\
 these and other findings inspired CNNs and they are perhaps one of the greatest success stories of biologically inspired artificial intelligence
+
 
 \end{document}
