@@ -10,7 +10,7 @@ import numpy as np
 colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
 nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
-# cmap = mpl.colormaps["tab20c"]
+cmap = mpl.colormaps["tab20c"]
 
 
 def parse_float(s, default=None):
@@ -18,6 +18,10 @@ def parse_float(s, default=None):
         return float(s)
     except ValueError:
         return default
+
+
+def fmt_accuracy(train_accuracy, val_accuracy):
+    return f"Accuracy: Train {train_accuracy:0.2f}, Validation {val_accuracy:0.2f}"
 
 
 class Node:
@@ -96,17 +100,9 @@ class LayerVisualization:
 
 
 class MLPVisualization:
-    training_interval = 20
     maxwidth = 10
-    default_hooks = {"train_batch": lambda: False, "stop_training": lambda: None}
 
     def __init__(self, mlp_interface, dx, dy, r):
-        self._train_batch = mlp_interface.hooks.get(
-            "train_batch", self.default_hooks["train_batch"]
-        )
-        self._stop_training = mlp_interface.hooks.get(
-            "stop_training", self.default_hooks["stop_training"]
-        )
 
         self.layers = [LayerVisualization(layer) for layer in mlp_interface.layers]
 
@@ -163,35 +159,34 @@ class MLPVisualization:
             self.edges.extend(edges)
 
         # create mpl objects
-        self.fig = plt.figure(layout="constrained")
+        self.fig = plt.figure()
 
         # fmt: off
         axs = self.fig.subplot_mosaic(
             [
-                ["box_dxdy", "graph"], 
-                ["btn_start", "graph"], 
-                ["btn_stop", "graph"],
-                ["batch_c", "graph"],
-                ["cbar", "graph"]
+                ["loss_plot", "empty" ,"box_dxdy", "btn_start"],
+                ["loss_plot", "graph", "graph", "graph"],   
+                ["accuracy_plot", "graph", "graph", "graph"],   
+                ["accuracy_plot", "cbar", "cbar", "cbar"]
             ], 
-            width_ratios=[5, 95],
+            width_ratios=[1, 0.4, 0.4, 0.4],
             height_ratios=[
-                5, 
-                5, 
-                5, 
-                5, 
-                80
+                5,
+                45,
+                45,
+                5
             ],
+            empty_sentinel="empty"
         )
         # fmt: on
 
-        self.ax1 = axs["graph"]
-        self.ax1.axis("off")
-        self.ax1.set_aspect("equal")
+        self.graph = axs["graph"]
+        self.graph.axis("off")
+        self.graph.set_aspect("equal")
 
         self.patch_c = PatchCollection(
             [],
-            transform=self.ax1.transData,
+            transform=self.graph.transData,
             edgecolor="#bdbdbd",
             facecolor="white",
             linewidth=2 * Node.radius,
@@ -200,7 +195,7 @@ class MLPVisualization:
 
         for layer in self.layers:
             if layer.overfull:
-                layer.overfull_text = self.ax1.text(
+                layer.overfull_text = self.graph.text(
                     x=0,
                     y=0,
                     s="...",
@@ -209,65 +204,54 @@ class MLPVisualization:
                     fontsize=24.0 * Node.radius,
                 )
 
-        self.ax1.add_collection(self.patch_c)
-        self.ax1.add_collection(self.line_c)
+        self.graph.add_collection(self.patch_c)
+        self.graph.add_collection(self.line_c)
 
+        # make controls
         self.box_dxdy = TextBox(
             ax=axs["box_dxdy"], label="(dx, dy)", textalignment="left"
         )
         self.box_dxdy.on_submit(self.update_geometry)
         self.box_dxdy.set_val(f"{self.dx}, {self.dy}")
+        self.btn_start = Button(ax=axs["btn_start"], label="Start")
 
-        btn_start = Button(ax=axs["btn_start"], label="Start")
-        self.ani = None
-        btn_start.on_clicked(self.start_training)
-        btn_stop = Button(ax=axs["btn_stop"], label="Stop")
-        btn_stop.on_clicked(self.stop_training)
+        # make loss plots
+        self.loss_plot = axs["loss_plot"]
+        self.train_loss_plot = self.loss_plot.plot(
+            [], [], label="Training Loss", color="blue"
+        )[0]
+        self.val_loss_plot = self.loss_plot.plot(
+            [], [], label="Validation Loss", color="red"
+        )[0]
+        self.loss_plot.legend()
+        self.loss_plot.dataLim.x0 = 0
+        self.loss_plot.dataLim.y0 = 0
 
-        batchc_ax = axs["batch_c"]
-        self.batchc_text = batchc_ax.text(
-            x=0,
-            y=0,
-            s=f"Batches: {0:06}",
-            ha="center",
-            va="center",
-            fontsize=12.0,
-        )
-        batchc_ax.axis("off")
-        batchc_ax.autoscale(enable=True)
+        # make accuracy plots
+        self.accuracy_plot = axs["accuracy_plot"]
+        self.train_accuracy_plot = self.accuracy_plot.plot(
+            [], [], label="Training Accuracy", color="blue"
+        )[0]
+        self.val_accuracy_plot = self.accuracy_plot.plot(
+            [], [], label="Validation Accuracy", color="red"
+        )[0]
+        self.accuracy_plot.dataLim.x0 = 0
+        self.accuracy_plot.dataLim.y0 = 0
+        self.accuracy_plot.dataLim.y1 = 1
+        self.accuracy_plot.legend()
 
+        # make colorbar
         self.fig.colorbar(
             mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=cmap),
             cax=axs["cbar"],
-            orientation="vertical",
+            orientation="horizontal",
             label=r"$\text{LogNorm}(W_{ij})$",
         )
 
         self.norm = SymLogNorm(linthresh=0.03)
 
+        # init weight colors
         self.update_weights()
-        plt.show()
-
-    def update_frame(self, frame):
-        if not self._train_batch():
-            self.ani.event_source.stop()
-        else:
-            self.update_weights()
-            self.batchc_text.set_text(f"Batches: {frame+1:06}")
-
-    def start_training(self, _):
-        self.ani = FuncAnimation(
-            fig=self.fig,
-            func=self.update_frame,
-            frames=None,
-            cache_frame_data=False,
-            interval=self.training_interval,
-        )
-
-    def stop_training(self, _):
-        if self.ani is not None:
-            self.ani.event_source.stop()
-            print("stopped animation")
 
     def update_weights(self):
         for layer in self.layers:
@@ -290,11 +274,11 @@ class MLPVisualization:
         x_max = self.x_maxnode.geometry.get_extents().xmax
         y_max = self.y_maxnode.geometry.get_extents().ymax
         y_min = -y_max
-        self.ax1.dataLim.x0 = x_min
-        self.ax1.dataLim.y0 = y_min
-        self.ax1.dataLim.x1 = x_max
-        self.ax1.dataLim.y1 = y_max
-        self.ax1.autoscale_view()
+        self.graph.dataLim.x0 = x_min
+        self.graph.dataLim.y0 = y_min
+        self.graph.dataLim.x1 = x_max
+        self.graph.dataLim.y1 = y_max
+        self.graph.autoscale_view()
         self.fig.canvas.draw_idle()
 
     def draw_graph(self):

@@ -1,29 +1,16 @@
 import numpy as np
-from mlp import MLP, Layer, InputLayer, OutputLayer, MultinoulliML
+from mlp import MLP, Layer, InputLayer, OutputLayer, MLogit
 from utils import Adam
 from visualization import MLPVisualization
+from matplotlib.animation import FuncAnimation
+import matplotlib.pyplot as plt
+from itertools import count
+from math import ceil
 
 
 class MLPInterface:
-    def __init__(self, mlp, training_it):
-        self._mlp = mlp
-        self._training_it = training_it
-        self.layers = [LayerInterface(layer) for layer in self._mlp.layers]
-
-        self.hooks = {
-            "train_batch": self.train_batch,
-            "stop_training": self.stop_training,
-        }
-
-    def train_batch(self):
-        try:
-            self._mlp.train_minibatch(next(self._training_it))
-            return True
-        except StopIteration:
-            return False
-
-    def stop_training(self):
-        self._mlp.cleanup_training()
+    def __init__(self, mlp):
+        self.layers = [LayerInterface(layer) for layer in mlp.layers]
 
 
 class LayerInterface:
@@ -33,10 +20,7 @@ class LayerInterface:
 
     @property
     def weights(self):
-        if self._layer.dropout.enabled:
-            return self._layer.W_s.T
-        else:
-            return self._layer.W.T
+        return self._layer.W.T
 
     @property
     def activations(self):
@@ -75,44 +59,153 @@ class epoch_it:
 
 
 class Program:
-    def __init__(self, data_path="data/train.csv"):
-        class DropoutConfig:
-            enabled = True
-            p_hidden = 0.7
-            p_input = 0.8
+    batch_windowsize = None
 
-        self.network = MLP(
-            [
-                InputLayer(28 * 28),
-                Layer(100),
-                Layer(100),
-                Layer(100),
-                Layer(100),
-                OutputLayer(10),
-            ],
-            model=MultinoulliML(),
-            optimizer=Adam(eps=0.1, clip_threshold=None),
-            dropout=DropoutConfig,
-        )
+    def __init__(self, model, data_path="data/train.csv"):
 
         batchsize = 20
-        epochs = 1
+        epochs = 2
 
         data = np.loadtxt(data_path, skiprows=1, delimiter=",", dtype=int)
         valset = data[:100]
         valset = (valset[:, 1:] / 255, valset[:, 0])
         trainset = data[100:]
-        it = map(
-            lambda batch: (batch[:, 1:] / 255, batch[:, 0]),
-            epoch_it(trainset, epochs, batchsize=batchsize),
-        )
+
+        example_it = epoch_it(trainset, epochs, batchsize=batchsize)
+
+        N = example_it.N
+
+        self.it = map(lambda batch: (batch[:, 1:] / 255, batch[:, 0]), example_it)
+
+        self.network = model
 
         self.network.init_training(batchsize=batchsize, validation_set=valset)
 
-        mlp_interface = MLPInterface(self.network, training_it=it)
+        mlp_interface = MLPInterface(self.network)
 
-        MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
+        self.visualization = MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
+
+        self.ani = None
+
+        self.visualization.btn_start.on_clicked(self.start)
+
+        plt.show()
+
+    def start(self, _):
+        self.train_loss = []
+        self.train_accuracy = []
+        self.val_loss = []
+        self.val_accuracy = []
+        self.index = []
+
+        if self.batch_windowsize is None:
+            self.ymax = 10
+            self.visualization.loss_plot.dataLim.y1 = self.ymax
+            self.update_plots = self.fixed_plot_update
+        else:
+            self.update_plots = self.moving_window_plot_update
+
+        self.ani = FuncAnimation(
+            self.visualization.fig,
+            self.update,
+            frames=count(start=1),
+            interval=20,
+            cache_frame_data=False,
+        )
+
+    def fixed_plot_update(self, n_frame):
+        xmax = ceil(n_frame / 100) * 100
+        self.visualization.train_loss_plot.set_xdata(self.index)
+        self.visualization.train_loss_plot.set_ydata(self.train_loss)
+        self.visualization.val_loss_plot.set_xdata(self.index)
+        self.visualization.val_loss_plot.set_ydata(self.val_loss)
+
+        self.visualization.train_accuracy_plot.set_xdata(self.index)
+        self.visualization.train_accuracy_plot.set_ydata(self.train_accuracy)
+        self.visualization.val_accuracy_plot.set_xdata(self.index)
+        self.visualization.val_accuracy_plot.set_ydata(self.val_accuracy)
+
+        self.visualization.loss_plot.dataLim.x1 = xmax
+        self.visualization.accuracy_plot.dataLim.x1 = xmax
+
+    def moving_window_plot_update(self, n_frame):
+        self.index = self.index[-self.batch_windowsize :]
+        self.train_loss = self.train_loss[-self.batch_windowsize :]
+        self.train_accuracy = self.train_accuracy[-self.batch_windowsize :]
+        self.val_loss = self.val_loss[-self.batch_windowsize :]
+        self.val_accuracy = self.val_accuracy[-self.batch_windowsize :]
+
+        xmin = self.index[0]
+        xmax = max(self.batch_windowsize, self.index[-1])
+
+        # update loss plots
+        self.visualization.train_loss_plot.set_xdata(self.index)
+        self.visualization.train_loss_plot.set_ydata(self.train_loss)
+
+        self.visualization.val_loss_plot.set_xdata(self.index)
+        self.visualization.val_loss_plot.set_ydata(self.val_loss)
+
+        self.visualization.loss_plot.dataLim.x0 = xmin
+        self.visualization.loss_plot.dataLim.x1 = xmax
+        self.visualization.loss_plot.dataLim.y1 = max(
+            max(self.train_loss), max(self.val_loss)
+        )
+
+        # update accuracy plots
+        self.visualization.train_accuracy_plot.set_xdata(self.index)
+        self.visualization.train_accuracy_plot.set_ydata(self.train_accuracy)
+
+        self.visualization.val_accuracy_plot.set_xdata(self.index)
+        self.visualization.val_accuracy_plot.set_ydata(self.val_accuracy)
+
+        self.visualization.accuracy_plot.dataLim.x0 = xmin
+        self.visualization.accuracy_plot.dataLim.x1 = xmax
+
+    def update(self, n_frame):
+        try:
+            (training_loss, training_accuracy, validation_loss, validation_accuracy) = (
+                self.network.train_minibatch(next(self.it))
+            )
+
+            self.index.append(n_frame)
+            self.train_loss.append(training_loss)
+            self.train_accuracy.append(training_accuracy)
+            self.val_loss.append(validation_loss)
+            self.val_accuracy.append(validation_accuracy)
+
+            self.update_plots(n_frame)
+
+            self.visualization.loss_plot.autoscale_view()
+            self.visualization.accuracy_plot.autoscale_view()
+
+            self.visualization.update_weights()
+
+        except StopIteration:
+            self.ani.event_source.stop()
+            self.ani = None
+            self.network.save_params()
+            self.network.cleanup_training()
+            print("Training ended. Saved weights.")
+
+
+def ModelSpec():
+    class DropoutConfig:
+        enabled = False
+        p_hidden = 0.7
+        p_input = 0.8
+
+    return MLP(
+        [
+            InputLayer(28 * 28),
+            Layer(16),
+            Layer(16),
+            OutputLayer(10),
+        ],
+        model=MLogit,
+        optimizer=Adam(eps=0.1),
+        dropout=DropoutConfig,
+    )
 
 
 if __name__ == "__main__":
-    Program()
+    Program(model=ModelSpec())

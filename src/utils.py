@@ -51,7 +51,7 @@ class Softmax(Activation):
 
 class Adam:
     def __init__(
-        self, eps=0.001, r1=0.9, r2=0.999, d=1e-8, clip_threshold=6, clip_stepsize=1
+        self, eps=0.001, r1=0.9, r2=0.999, d=1e-8, clip_threshold=None, clip_stepsize=1
     ):
         self.eps = eps
         self.r1 = r1

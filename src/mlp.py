@@ -1,5 +1,6 @@
 import numpy as np
 from utils import Activation, ReLU, Softmax, Adam
+import os.path
 
 
 class MLogit:
@@ -442,6 +443,16 @@ class MLP:
             layer.toggle_feedforward()
 
         return (training_loss, training_accuracy, validation_loss, validation_accuracy)
+
+    def save_params(self):
+        for i, layer in enumerate(self.layers[1:], start=1):
+            np.save(f"params/W{i}", layer.W)
+            np.save(f"params/b{i}", layer.b)
+
+    def load_params(self, path):
+        for i, layer in enumerate(self.layers[1:], start=1):
+            layer.W = np.load(os.path.join(path, f"W{i}.npy"))
+            layer.b = np.load(os.path.join(path, f"b{i}.npy"))
 
     def _feedforward(self, X):
         layer = self.input_layer
