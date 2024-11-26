@@ -119,8 +119,8 @@
     \frametitle{A broad Definition of Machine Learning}
     
         \say{A computer program is said to learn from experience E 
-        with respect to some class of tasks T and performance measure P, 
-        if its performance at tasks in T, as measured by P, improves with
+        with respect to some class of tasks T [...], 
+        if its performance at tasks in T [...] improves with
         experience.} \cite{mitchell97}
     
 \end{frame}
@@ -991,7 +991,7 @@
     \onslide<8->{Affine transformation returns parameters $z_i$ for logistic model:}
     \begin{flalign*}
         \onslide<8->{z :=& \k{z}{N} = \k{W}{N} \phi(x; \theta) + \k{b}{N}} \\
-        \onslide<9->{p(c=i) =& \frac{\exp(z_i)}{\sum_{j}\exp(z_j)} =: \text{softmax}(z)_i}
+        \onslide<9->{p\c{c=i}{x} =& \frac{\exp(z_i)}{\sum_{j}\exp(z_j)} =: \text{softmax}(z)_i}
     \end{flalign*}
 \end{frame}
 
@@ -1013,13 +1013,13 @@
         \onslide<4->{J(\theta) &= \frac{1}{m} \sum_{k=1}^{m} L(x_k, y_k; \theta)}
     \end{flalign*}
 
-    \onslide<5->{Optimization and Regulation:}
+    \onslide<5->{Optimization and Regularization:}
     \begin{itemize}
         \onslide<6->{\item SGD using batchsize 20 with Adam optimizer}
         \onslide<7->{\item Early Stopping}
         \onslide<8->{\item Dropout with $\p{hidden}=0.7$ and $\p{input}=0.8$ for keeping input and hidden nodes}
     \end{itemize}
-    \onslide<9->{\arrow Result: 90\% accuracy on validation set in 50 epochs / $\approx$ 7 mins. of training}
+    \onslide<9->{\arrow Best result: $\approx$ 90\% accuracy on validation set}
 
     \vspace{1em}
     \onslide<10->{Source code: \url{https://github.com/philipobi/seminar}}
