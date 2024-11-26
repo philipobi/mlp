@@ -28,7 +28,6 @@ def init_training_data(path, batchsize, valsetsize, epochs):
 class MLPInterface:
     def __init__(self, mlp):
         self.layers = [LayerInterface(layer) for layer in mlp.layers]
-        data = np.loadtxt()
 
 
 class LayerInterface:
@@ -172,8 +171,7 @@ class Program:
             self.ani.event_source.stop()
             self.ani = None
             self.network.cleanup_training()
-            self.network.save_params()
-            print("Training ended. Saved weights.")
+            print("Training ended.")
 
 
 def ModelSpecLarge():
@@ -197,5 +195,22 @@ def ModelSpecLarge():
     )
 
 
+def ModelSpecSmall():
+    class DropoutConfig:
+        enabled = False
+
+    return MLP(
+        [
+            InputLayer(28 * 28),
+            Layer(16),
+            Layer(16),
+            OutputLayer(10),
+        ],
+        model=MLogit,
+        optimizer=Adam(eps=0.4),
+        dropout=DropoutConfig,
+    )
+
+
 if __name__ == "__main__":
-    Program(model=ModelSpecLarge())
+    Program(model=ModelSpecSmall())

@@ -479,14 +479,8 @@ class MLP:
             layer = layer.child
 
     def feedforward(self, x):
-
-        layer = self.input_layer
-        layer.A = x
-        layer = layer.child
-        while layer:
-            layer.A = layer.activation.func(layer.parent.A @ layer.W + layer.b)
-            layer = layer.child
-        return np.argmax(self.output_layer.A)
+        self._feedforward(x)
+        return (np.argmax(self.output_layer.A), self.output_layer.A)
 
 
 class ParameterAxis:
