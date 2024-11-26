@@ -1,4 +1,5 @@
-\documentclass[handout]{beamer}
+%\documentclass[handout]{beamer}
+\documentclass{beamer}
 \usepackage{mathtools}
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -20,10 +21,10 @@
 \addbibresource{img.bib}
     
     
-\setbeameroption{show notes}
-\setbeamertemplate{note page}{%
-    \insertnote
-}
+% \setbeameroption{show notes}
+% \setbeamertemplate{note page}{%
+%     \insertnote
+% }
 
 \setlength{\parindent}{0pt}
 
@@ -1016,11 +1017,12 @@
     \begin{itemize}
         \onslide<6->{\item SGD using batchsize 20 with Adam optimizer}
         \onslide<7->{\item Early Stopping}
-        \onslide<8->{\item Dropout with $p=$ and $p=$ for keeping input and hidden nodes}
+        \onslide<8->{\item Dropout with $\p{hidden}=0.7$ and $\p{input}=0.8$ for keeping input and hidden nodes}
     \end{itemize}
+    \onslide<9->{\arrow Result: 90\% accuracy on validation set in 50 epochs / $\approx$ 7 mins. of training}
 
     \vspace{1em}
-    \onslide<9->{Source code: \url{https://github.com/philipobi/seminar}}
+    \onslide<10->{Source code: \url{https://github.com/philipobi/seminar}}
 \end{frame}
 
 \note[itemize]{

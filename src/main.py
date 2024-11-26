@@ -6,11 +6,29 @@ from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from itertools import count
 from math import ceil
+from utils import epoch_it
+
+
+def init_training_data(path, batchsize, valsetsize, epochs):
+
+    data = np.loadtxt(path, skiprows=1, delimiter=",", dtype=int)
+    valset = data[:valsetsize]
+    valset = (valset[:, 1:] / 255, valset[:, 0])
+    trainset = data[valsetsize:]
+
+    example_it = epoch_it(trainset, epochs=epochs, batchsize=batchsize)
+
+    N = example_it.N
+
+    it = map(lambda batch: (batch[:, 1:] / 255, batch[:, 0]), example_it)
+
+    return (N, it, valset)
 
 
 class MLPInterface:
     def __init__(self, mlp):
         self.layers = [LayerInterface(layer) for layer in mlp.layers]
+        data = np.loadtxt()
 
 
 class LayerInterface:
@@ -31,51 +49,21 @@ class LayerInterface:
             return A
 
 
-class epoch_it:
-    def __init__(self, X, epochs, batchsize):
-        self.X = X
-        self.epochs = epochs
-        self.batchsize = batchsize
-        n, _ = self.X.shape
-        self.i = 0
-        self.m = int(n / self.batchsize)
-        self.N = self.epochs * self.m
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self.epochs > 0:
-            if self.i < self.m:
-                batch = self.X[self.i * self.batchsize : (self.i + 1) * self.batchsize]
-                self.i += 1
-                return batch
-            else:
-                self.i = 0
-                self.epochs -= 1
-                return self.__next__()
-        else:
-            raise StopIteration
-
-
 class Program:
     batch_windowsize = None
 
     def __init__(self, model, data_path="data/train.csv"):
 
         batchsize = 20
+        valsetsize = 100
         epochs = 2
 
-        data = np.loadtxt(data_path, skiprows=1, delimiter=",", dtype=int)
-        valset = data[:100]
-        valset = (valset[:, 1:] / 255, valset[:, 0])
-        trainset = data[100:]
-
-        example_it = epoch_it(trainset, epochs, batchsize=batchsize)
-
-        N = example_it.N
-
-        self.it = map(lambda batch: (batch[:, 1:] / 255, batch[:, 0]), example_it)
+        N, self.it, valset = init_training_data(
+            data_path,
+            batchsize=batchsize,
+            valsetsize=valsetsize,
+            epochs=epochs,
+        )
 
         self.network = model
 
@@ -183,22 +171,24 @@ class Program:
         except StopIteration:
             self.ani.event_source.stop()
             self.ani = None
-            self.network.save_params()
             self.network.cleanup_training()
+            self.network.save_params()
             print("Training ended. Saved weights.")
 
 
-def ModelSpec():
+def ModelSpecLarge():
     class DropoutConfig:
-        enabled = False
+        enabled = True
         p_hidden = 0.7
         p_input = 0.8
 
     return MLP(
         [
             InputLayer(28 * 28),
-            Layer(16),
-            Layer(16),
+            Layer(100),
+            Layer(100),
+            Layer(100),
+            Layer(100),
             OutputLayer(10),
         ],
         model=MLogit,
@@ -208,4 +198,4 @@ def ModelSpec():
 
 
 if __name__ == "__main__":
-    Program(model=ModelSpec())
+    Program(model=ModelSpecLarge())

@@ -215,6 +215,9 @@ class Layer(LayerDroppable):
         self.dJdb = np.empty(self.width)
         self.dZdA = self.W.T
 
+        self.W_opt = np.empty_like(self.W)
+        self.b_opt = np.empty_like(self.b)
+
     def cleanup_training(self):
         self.batchsize = None
 
@@ -231,6 +234,12 @@ class Layer(LayerDroppable):
         self.dJdbn = None
         self.dJdb = None
         self.dZdA = None
+
+        (self.W, self.W_opt) = (self.W_opt, self.W)
+        (self.b, self.b_opt) = (self.b_opt, self.b)
+
+        self.W_opt = None
+        self.b_opt = None
 
     def init_dropout(self, batchsize):
         super().init_dropout(batchsize)
@@ -394,6 +403,8 @@ class MLP:
             for layer in self.layers:
                 layer.init_dropout(batchsize)
 
+        self.min_valset_loss = np.inf
+
     def cleanup_training(self):
         for layer in self.layers:
             layer.cleanup_training()
@@ -442,12 +453,18 @@ class MLP:
         for layer in self.layers:
             layer.toggle_feedforward()
 
+        if validation_loss < self.min_valset_loss:
+            self.min_valset_loss = validation_loss
+            for layer in self.layers[1:]:
+                np.copyto(src=layer.W, dst=layer.W_opt)
+                np.copyto(src=layer.b, dst=layer.b_opt)
+
         return (training_loss, training_accuracy, validation_loss, validation_accuracy)
 
-    def save_params(self):
+    def save_params(self, path):
         for i, layer in enumerate(self.layers[1:], start=1):
-            np.save(f"params/W{i}", layer.W)
-            np.save(f"params/b{i}", layer.b)
+            np.save(os.path.join(path, f"W{i}"), layer.W)
+            np.save(os.path.join(path, f"b{i}"), layer.b)
 
     def load_params(self, path):
         for i, layer in enumerate(self.layers[1:], start=1):
