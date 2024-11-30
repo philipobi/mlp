@@ -1,7 +1,7 @@
 import numpy as np
 from mlp import MLP, Layer, InputLayer, OutputLayer, MLogit
 from utils import Adam
-from visualization import MLPVisualization
+from visualization import MLPVisualization, Node
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from itertools import count
@@ -40,7 +40,7 @@ class LayerInterface:
         return self._layer.W.T
 
     @property
-    def activations(self):
+    def activation(self):
         A = self._layer.A
         if len(A.shape) > 1:
             return A[0]
@@ -80,6 +80,19 @@ class Program:
         plt.show()
 
     def start(self, _):
+        r = Node.radius
+
+        def update(n_frame):
+            for layer in self.visualization.layers:
+                layer.set_activation_rad(n_frame / 60 * 0.7 * r * np.ones(layer.width))
+            self.visualization.update_activations()
+
+        self.ani = FuncAnimation(
+            self.visualization.fig, func=update, frames=60, interval=15
+        )
+
+        return
+
         self.train_loss = []
         self.train_accuracy = []
         self.val_loss = []

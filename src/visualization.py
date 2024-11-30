@@ -13,70 +13,33 @@ import matplotlib as mpl
 import numpy as np
 
 
-colors = [
-    "#e6550d",
-    "#fd8d3c",
-    "#fdae6b",
-    "#fdd0a2",
-    "#d9d9d9",
-    "#c7e9c0",
-    "#a1d99b",
-    "#74c476",
-    "#31a354",
+# fmt:off
+# red -> green
+colors= [
+    (0.62745098, 0.00784314, 0.12156863,),
+    (0.6674356,  0.00984237, 0.10557478,),
+    (0.70695886, 0.01214917, 0.08981161,),
+    (0.73710111, 0.02291426, 0.07904652,),
+    (0.76509035, 0.03260285, 0.06874279,),
+    (0.7952326,  0.04121492, 0.05582468,),
+    (0.82537486, 0.07128028, 0.07128028,),
+    (0.86412918, 0.16816609, 0.16816609,),
+    (0.90025515, 0.26003441, 0.26003441,),
+    (0.93940093, 0.3622484,  0.3622484,),
+    (0.36123713, 0.80906023, 0.28369353,),
+    (0.26554744, 0.75904062, 0.20757673,),
+    (0.17723952, 0.71164937, 0.13856209,),
+    (0.08250673, 0.65997693, 0.06535948,),
+    (0.0544406,  0.61637832, 0.05582468,),
+    (0.04798155, 0.57116494, 0.06874279,),
+    (0.04875048, 0.53425606, 0.08750481,),
+    (0.0509035,  0.49550173, 0.10903499,),
+    (0.0413687,  0.45182622, 0.11749327,),
+    (0.03137255, 0.40784314, 0.1254902,),
 ]
-
-# palette: https://medium.com/design-bootcamp/creating-a-consistent-color-palette-for-your-interface-870e47a4206a
-# dark -> light
-red = [
-    "#89012A",
-    "#A0021F",
-    "#B40317",
-    "#C20812",
-    "#D00C0C",
-    "#E23939",
-    "#F46868",
-]
-# light -> dark
-green = [
-    "#67D451",
-    "#3BBD2E",
-    "#0FA50C",
-    "#0C9012",
-    "#0D7E1C",
-    "#086820",
-    "#025322",
-]
-
-
-colors = [
-    (0.90196078, 0.33333333, 0.05098039),
-    (0.9290092, 0.39919036, 0.10625325),
-    (0.95605762, 0.46504738, 0.16152611),
-    (0.98518669, 0.53597033, 0.22105073),
-    (0.99215686, 0.5817491, 0.27632359),
-    (0.99215686, 0.62354298, 0.3358482),
-    (0.99215686, 0.66235158, 0.39112106),
-    (0.99215686, 0.70635919, 0.45844148),
-    (0.99215686, 0.74911004, 0.52759727),
-    (0.99215686, 0.79514942, 0.60207274),
-    (0.75879737, 0.90463295, 0.73191467),
-    (0.71038631, 0.88424934, 0.68477759),
-    (0.66543319, 0.86532171, 0.64100744),
-    (0.61447859, 0.84309655, 0.59395255),
-    (0.56155777, 0.81840016, 0.55043988),
-    (0.50456612, 0.79180406, 0.50358007),
-    (0.4497501, 0.76608997, 0.46013072),
-    (0.35959246, 0.72168397, 0.41437908),
-    (0.27587466, 0.68044983, 0.37189542),
-    (0.19215686, 0.63921569, 0.32941176),
-]
-
-
-# colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
-# nodes = [0.0, 0.17, 0.34, 0.499, 0.5, 0.501, 0.67, 0.84, 1.0]
-# cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
-
+# fmt:on
 cmap = ListedColormap(colors=colors)
+cmap = mpl.colormaps["tab20c"]
 
 
 def parse_float(s, default=None):
@@ -102,6 +65,7 @@ class Node:
             kwargs["radius"] = self.radius
 
         self.node = Circle(xy=self.xy_, **kwargs)
+        kwargs["radius"] = 0.0
         self.activation = Circle(xy=self.xy_, **kwargs)
 
     @property
@@ -142,6 +106,7 @@ class LayerVisualization:
         self.incoming_edges = []
 
         self._get_edge_weights = lambda W: None
+        self._get_activations = lambda A: None
 
     def add_nodes(self, nodes):
         for node in nodes:
@@ -157,6 +122,13 @@ class LayerVisualization:
     def get_edge_weights(self):
         if self.incoming_edges:
             return self._get_edge_weights(self.weights)
+
+    def get_activations(self):
+        return self._get_activations(self.activations)
+
+    def set_activation_rad(self, rad):
+        for node, radius in zip(self.nodes, rad):
+            node.activation.set_radius(radius)
 
     @property
     def activations(self):
@@ -201,6 +173,23 @@ def edge_weight_func(c1, w1, c2, w2):
             return arr.reshape((size,), copy=False)
 
     return (size, func)
+
+
+def activation_func(c, w):
+    arr = np.empty(c)
+    c_2 = int(c / 2)
+    if c == w:
+
+        def func(A):
+            return A
+
+    if c != w:
+
+        def func(A):
+            np.concat(A[:c_2], A[-c_2:], axis=0, out=arr)
+            return arr
+
+    return func
 
 
 class MLPVisualization:
@@ -250,6 +239,8 @@ class MLPVisualization:
             layer.add_nodes(nodes1)
             layer.add_nodes(nodes2)
 
+            layer._get_activations = activation_func(count, layer.width)
+
         self.x_minnode = self.layers[0].nodes[0]
         self.x_maxnode = self.layers[-1].nodes[0]
         self.y_maxnode = max(self.layers, key=lambda l: l.width).nodes[0]
@@ -263,7 +254,10 @@ class MLPVisualization:
 
         self.weights = np.empty(weight_len)
 
-        self.patches = [node.node for layer in self.layers for node in layer.nodes]
+        self.nodes = [node.node for layer in self.layers for node in layer.nodes]
+        self.activations = [
+            node.activation for layer in self.layers for node in layer.nodes
+        ]
 
         self.edges = []
         for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
@@ -306,7 +300,17 @@ class MLPVisualization:
             edgecolor="#bdbdbd",
             facecolor="white",
             linewidth=2 * Node.radius,
+            zorder=1,
         )
+
+        self.patch_ca = PatchCollection(
+            [],
+            transform=self.graph.transData,
+            facecolor="#bdbdbd",
+            linewidth=0,
+            zorder=2,
+        )
+
         self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=5)
 
         for layer in self.layers:
@@ -323,6 +327,7 @@ class MLPVisualization:
                 )
 
         self.graph.add_collection(self.patch_c)
+        self.graph.add_collection(self.patch_ca)
         self.graph.add_collection(self.line_c)
 
         # make controls
@@ -381,8 +386,8 @@ class MLPVisualization:
         self.norm.vmin = self.weights.min()
         self.norm.vmax = self.weights.max()
 
-        # self.line_c.set_colors(cmap(self.norm(self.weights)))
-        self.line_c.set_colors(cmap(1 / (1 + np.exp(-self.weights))))
+        self.line_c.set_colors(cmap(self.norm(self.weights)))
+        # self.line_c.set_colors(cmap(1 / (1 + np.exp(-self.weights))))
 
     def update_geometry(self, val):
         dx, dy = self.box_dxdy.text.split(",")
@@ -401,9 +406,13 @@ class MLPVisualization:
         self.graph.autoscale_view()
         self.fig.canvas.draw_idle()
 
+    def update_activations(self):
+        self.patch_ca.set_paths(self.activations)
+
     def draw_graph(self):
         for j, layer in enumerate(self.layers):
             layer.draw(j, self.dx, self.dy)
 
-        self.patch_c.set_paths(self.patches)
+        self.patch_c.set_paths(self.nodes)
+        self.patch_ca.set_paths(self.activations)
         self.line_c.set_segments([edge.geometry for edge in self.edges])
