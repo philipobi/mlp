@@ -1,16 +1,82 @@
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
 from matplotlib.collections import PatchCollection, LineCollection
-from matplotlib.colors import LinearSegmentedColormap, Normalize, SymLogNorm
+from matplotlib.colors import (
+    LinearSegmentedColormap,
+    Normalize,
+    SymLogNorm,
+    ListedColormap,
+)
 from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
 
-colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
-nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
-cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
-cmap = mpl.colormaps["tab20c"]
+
+colors = [
+    "#e6550d",
+    "#fd8d3c",
+    "#fdae6b",
+    "#fdd0a2",
+    "#d9d9d9",
+    "#c7e9c0",
+    "#a1d99b",
+    "#74c476",
+    "#31a354",
+]
+
+# palette: https://medium.com/design-bootcamp/creating-a-consistent-color-palette-for-your-interface-870e47a4206a
+# dark -> light
+red = [
+    "#89012A",
+    "#A0021F",
+    "#B40317",
+    "#C20812",
+    "#D00C0C",
+    "#E23939",
+    "#F46868",
+]
+# light -> dark
+green = [
+    "#67D451",
+    "#3BBD2E",
+    "#0FA50C",
+    "#0C9012",
+    "#0D7E1C",
+    "#086820",
+    "#025322",
+]
+
+
+colors = [
+    (0.90196078, 0.33333333, 0.05098039),
+    (0.9290092, 0.39919036, 0.10625325),
+    (0.95605762, 0.46504738, 0.16152611),
+    (0.98518669, 0.53597033, 0.22105073),
+    (0.99215686, 0.5817491, 0.27632359),
+    (0.99215686, 0.62354298, 0.3358482),
+    (0.99215686, 0.66235158, 0.39112106),
+    (0.99215686, 0.70635919, 0.45844148),
+    (0.99215686, 0.74911004, 0.52759727),
+    (0.99215686, 0.79514942, 0.60207274),
+    (0.75879737, 0.90463295, 0.73191467),
+    (0.71038631, 0.88424934, 0.68477759),
+    (0.66543319, 0.86532171, 0.64100744),
+    (0.61447859, 0.84309655, 0.59395255),
+    (0.56155777, 0.81840016, 0.55043988),
+    (0.50456612, 0.79180406, 0.50358007),
+    (0.4497501, 0.76608997, 0.46013072),
+    (0.35959246, 0.72168397, 0.41437908),
+    (0.27587466, 0.68044983, 0.37189542),
+    (0.19215686, 0.63921569, 0.32941176),
+]
+
+
+# colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
+# nodes = [0.0, 0.17, 0.34, 0.499, 0.5, 0.501, 0.67, 0.84, 1.0]
+# cmap = LinearSegmentedColormap.from_list("mycmap", list(zip(nodes, colors)))
+
+cmap = ListedColormap(colors=colors)
 
 
 def parse_float(s, default=None):
@@ -31,11 +97,12 @@ class Node:
         self.i = i
         self.y_ord = y_ord
         self.xy_ = xy
-        self.geometry = (
-            Circle(xy=self.xy_, **kwargs)
-            if self.radius is None
-            else Circle(xy=self.xy_, radius=self.radius, **kwargs)
-        )
+
+        if kwargs.get("radius", None) is None:
+            kwargs["radius"] = self.radius
+
+        self.node = Circle(xy=self.xy_, **kwargs)
+        self.activation = Circle(xy=self.xy_, **kwargs)
 
     @property
     def xy(self):
@@ -44,7 +111,8 @@ class Node:
     @xy.setter
     def xy(self, value):
         self.xy_ = value
-        self.geometry.center = self.xy_
+        self.node.center = self.xy_
+        self.activation.center = self.xy_
 
 
 class Edge:
@@ -62,7 +130,7 @@ class LayerVisualization:
     def default_callback(self, event):
         pass
 
-    def __init__(self, layer, callbacks={}):
+    def __init__(self, layer):
         self.layer = layer
         self.width = layer.width
 
@@ -72,6 +140,8 @@ class LayerVisualization:
 
         self.nodes = []
         self.incoming_edges = []
+
+        self._get_edge_weights = lambda W: None
 
     def add_nodes(self, nodes):
         for node in nodes:
@@ -84,11 +154,9 @@ class LayerVisualization:
         if self.overfull:
             self.overfull_text.set_position((j * dx, 0))
 
-    def update_edge_weights(self):
+    def get_edge_weights(self):
         if self.incoming_edges:
-            W = self.weights
-            for edge in self.incoming_edges:
-                edge.weight = W[edge.node2.i, edge.node1.i]
+            return self._get_edge_weights(self.weights)
 
     @property
     def activations(self):
@@ -97,6 +165,42 @@ class LayerVisualization:
     @property
     def weights(self):
         return self.layer.weights
+
+
+def edge_weight_func(c1, w1, c2, w2):
+    c1_2 = int(c1 / 2)
+    c2_2 = int(c2 / 2)
+
+    size = c1 * c2
+
+    arr = np.empty((c2, c1))
+    arr1 = np.empty((w2, c1))
+
+    if c1 == w1 and c2 == w2:
+
+        def func(W):
+            return W.reshape((size,), copy=False)
+
+    elif c1 == w1 and c2 != w2:
+
+        def func(W):
+            np.concat((W[:c2_2, :], W[-c2_2:, :]), axis=0, out=arr)
+            return arr.reshape((size,), copy=False)
+
+    elif c1 != w1 and c2 == w2:
+
+        def func(W):
+            np.concat((W[:, :c1_2], W[:, -c1_2:]), axis=1, out=arr)
+            return arr.reshape((size,), copy=False)
+
+    elif c1 != w1 and c2 != w2:
+
+        def func(W):
+            np.concat((W[:, :c1_2], W[:, -c1_2:]), axis=1, out=arr1)
+            np.concat((arr1[:c2_2, :], arr1[-c2_2:, :]), axis=0, out=arr)
+            return arr.reshape((size,), copy=False)
+
+    return (size, func)
 
 
 class MLPVisualization:
@@ -130,14 +234,17 @@ class MLPVisualization:
                     nodes1.append(Node(i=k, y_ord=y_ord))
                     nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
 
-                layer.count = count
+                layer.count = 2 * count
+
             else:
-                for k in range(c):
+                for k in range(count := c):
                     y_ord = c - k + y_offset
                     nodes1.append(Node(i=k, y_ord=y_ord))
                     nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
                 if centered:
                     nodes1.append(Node(i=k + 1, y_ord=0))
+
+                layer.count = layer.width
 
             nodes2.reverse()
             layer.add_nodes(nodes1)
@@ -147,7 +254,16 @@ class MLPVisualization:
         self.x_maxnode = self.layers[-1].nodes[0]
         self.y_maxnode = max(self.layers, key=lambda l: l.width).nodes[0]
 
-        self.patches = [node.geometry for layer in self.layers for node in layer.nodes]
+        weight_len = 0
+        for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
+            (size, layer2._get_edge_weights) = edge_weight_func(
+                layer1.count, layer1.width, layer2.count, layer2.width
+            )
+            weight_len += size
+
+        self.weights = np.empty(weight_len)
+
+        self.patches = [node.node for layer in self.layers for node in layer.nodes]
 
         self.edges = []
         for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
@@ -202,6 +318,8 @@ class MLPVisualization:
                     ha="center",
                     va="center",
                     fontsize=24.0 * Node.radius,
+                    color="gray",
+                    clip_on=True,
                 )
 
         self.graph.add_collection(self.patch_c)
@@ -254,15 +372,17 @@ class MLPVisualization:
         self.update_weights()
 
     def update_weights(self):
-        for layer in self.layers:
-            layer.update_edge_weights()
+        np.concat(
+            tuple((layer.get_edge_weights() for layer in self.layers[1:])),
+            axis=0,
+            out=self.weights,
+        )
 
-        weights = np.array([edge.weight for edge in self.edges])
+        self.norm.vmin = self.weights.min()
+        self.norm.vmax = self.weights.max()
 
-        self.norm.vmin = weights.min()
-        self.norm.vmax = weights.max()
-
-        self.line_c.set_colors(cmap(self.norm(weights)))
+        # self.line_c.set_colors(cmap(self.norm(self.weights)))
+        self.line_c.set_colors(cmap(1 / (1 + np.exp(-self.weights))))
 
     def update_geometry(self, val):
         dx, dy = self.box_dxdy.text.split(",")
@@ -270,9 +390,9 @@ class MLPVisualization:
         self.dy = parse_float(dy, default=self.dy)
 
         self.draw_graph()
-        x_min = self.x_minnode.geometry.get_extents().xmin
-        x_max = self.x_maxnode.geometry.get_extents().xmax
-        y_max = self.y_maxnode.geometry.get_extents().ymax
+        x_min = self.x_minnode.node.get_extents().xmin
+        x_max = self.x_maxnode.node.get_extents().xmax
+        y_max = self.y_maxnode.node.get_extents().ymax
         y_min = -y_max
         self.graph.dataLim.x0 = x_min
         self.graph.dataLim.y0 = y_min

@@ -70,6 +70,7 @@ class Program:
 
         mlp_interface = MLPInterface(self.network)
 
+        MLPVisualization.maxwidth = 11
         self.visualization = MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
 
         self.ani = None
