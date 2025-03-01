@@ -11,7 +11,7 @@ from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
-
+import threading
 
 # fmt:off
 # red -> green
@@ -39,7 +39,7 @@ colors= [
 ]
 # fmt:on
 cmap = ListedColormap(colors=colors)
-cmap = mpl.colormaps["tab20c"]
+cmap = mpl.colormaps["viridis"]
 
 
 def parse_float(s, default=None):
@@ -97,21 +97,34 @@ class LayerVisualization:
     def __init__(self, layer):
         self.layer = layer
         self.width = layer.width
+        self.n = None
 
         self.overfull = False
         self.overfull_text = None
-        self.count = None
 
         self.nodes = []
         self.incoming_edges = []
+        self.activation_circles = []
+        self._patch_ca = None
 
-        self._get_edge_weights = lambda W: None
-        self._get_activations = lambda A: None
+        self._visible_edge_weights = lambda W: None
+        self._visible_activations = lambda A: None
+        self.normalize_activations = True
 
     def add_nodes(self, nodes):
         for node in nodes:
             node.parent = self
         self.nodes.extend(nodes)
+        self.activation_circles.extend([node.activation for node in nodes])
+
+    @property
+    def patch_ca(self):
+        return self._patch_ca
+
+    @patch_ca.setter
+    def patch_ca(self, coll):
+        self._patch_ca = coll
+        self._patch_ca.set_paths(self.activation_circles)
 
     def draw(self, j, dx, dy):
         for node in self.nodes:
@@ -119,83 +132,129 @@ class LayerVisualization:
         if self.overfull:
             self.overfull_text.set_position((j * dx, 0))
 
-    def get_edge_weights(self):
-        if self.incoming_edges:
-            return self._get_edge_weights(self.weights)
+    def set_activation_rad(self, radii):
+        for circle, radius in zip(self.activation_circles, radii):
+            circle.set_radius(radius)
 
-    def get_activations(self):
-        return self._get_activations(self.activations)
+    def animation_update(self, n_frame):
+        normalized_activations = (
+            self.visible_activations / self.activations.max()
+            if self.normalize_activations
+            else self.visible_activations
+        )
+        factor = n_frame / self.n_frames * Node.radius * 0.9
+        self.set_activation_rad(factor * normalized_activations)
+        self.patch_ca.set_paths(self.activation_circles)
 
-    def set_activation_rad(self, rad):
-        for node, radius in zip(self.nodes, rad):
-            node.activation.set_radius(radius)
+    def animate_activation(self, **kwargs):
+        self.n_frames = kwargs["frames"]
+        self.ani = FuncAnimation(**kwargs, func=self.animation_update, repeat=False)
 
     @property
     def activations(self):
-        return self.layer.activations
+        return self.layer.activation
+
+    @property
+    def visible_activations(self):
+        return self._visible_activations(self.activations)
+
+    @visible_activations.setter
+    def visible_activations(self, n):
+        self.n = n
+        if n == 0:
+            arr = np.empty(self.width)
+
+            def func(A):
+                np.divide(A, A.max(), out=arr)
+                return arr
+
+        else:
+            arr = np.empty(2 * n)
+
+            def func(A):
+                np.concat((A[: self.n], A[-self.n :]), out=arr)
+                return arr
+
+        self._visible_activations = func
 
     @property
     def weights(self):
         return self.layer.weights
 
+    @property
+    def visible_edge_weights(self):
+        return self._visible_edge_weights(self.weights)
 
-def edge_weight_func(c1, w1, c2, w2):
-    c1_2 = int(c1 / 2)
-    c2_2 = int(c2 / 2)
+    def make_incoming_edges(self, previous):
+        n1 = previous.n
+        n2 = self.n
 
-    size = c1 * c2
+        c1 = 2 * n1 or previous.width
+        c2 = 2 * n2 or self.width
 
-    arr = np.empty((c2, c1))
-    arr1 = np.empty((w2, c1))
+        size = c1 * c2
 
-    if c1 == w1 and c2 == w2:
+        arr = np.empty((c2, c1))
+        arr1 = np.empty((self.width, c1))
 
-        def func(W):
-            return W.reshape((size,), copy=False)
+        if not (n1 or n2):  # both layers are fully visible
 
-    elif c1 == w1 and c2 != w2:
+            def func(W):
+                return W.reshape((size,), copy=False)
 
-        def func(W):
-            np.concat((W[:c2_2, :], W[-c2_2:, :]), axis=0, out=arr)
-            return arr.reshape((size,), copy=False)
+        elif (not n1) and n2:  # current layer is not fully visible
 
-    elif c1 != w1 and c2 == w2:
+            def func(W):
+                np.concat((W[:n2, :], W[-n2:, :]), axis=0, out=arr)
+                return arr.reshape((size,), copy=False)
 
-        def func(W):
-            np.concat((W[:, :c1_2], W[:, -c1_2:]), axis=1, out=arr)
-            return arr.reshape((size,), copy=False)
+        elif n1 and (not n2):  # previous layer is not fully visible
 
-    elif c1 != w1 and c2 != w2:
+            def func(W):
+                np.concat((W[:, :n1], W[:, -n1:]), axis=1, out=arr)
+                return arr.reshape((size,), copy=False)
 
-        def func(W):
-            np.concat((W[:, :c1_2], W[:, -c1_2:]), axis=1, out=arr1)
-            np.concat((arr1[:c2_2, :], arr1[-c2_2:, :]), axis=0, out=arr)
-            return arr.reshape((size,), copy=False)
+        elif n1 and n2:  # both layers not fully visible
 
-    return (size, func)
+            def func(W):
+                np.concat((W[:, :n1], W[:, -n1:]), axis=1, out=arr1)
+                np.concat((arr1[:n2, :], arr1[-n2:, :]), axis=0, out=arr)
+                return arr.reshape((size,), copy=False)
 
-
-def activation_func(c, w):
-    arr = np.empty(c)
-    c_2 = int(c / 2)
-    if c == w:
-
-        def func(A):
-            return A
-
-    if c != w:
-
-        def func(A):
-            np.concat(A[:c_2], A[-c_2:], axis=0, out=arr)
-            return arr
-
-    return func
+        self._visible_edge_weights = func
+        return size
 
 
 class MLPVisualization:
     maxwidth = 10
 
     def __init__(self, mlp_interface, dx, dy, r):
+
+        # create mpl objects
+        self.fig = plt.figure()
+
+        # fmt: off
+        axs = self.fig.subplot_mosaic(
+            [
+                ["empty", "empty" ,"box_dxdy", "btn_start"],
+                ["img", "graph", "graph", "graph"],   
+                ["img", "graph", "graph", "graph"],   
+                ["empty", "cbar", "cbar", "cbar"]
+            ], 
+            width_ratios=[1, 0.4, 0.4, 0.4],
+            height_ratios=[
+                5,
+                45,
+                45,
+                5
+            ],
+            empty_sentinel="empty"
+        )
+        # fmt: on
+
+        self.graph = axs["graph"]
+        self.graph.axis("off")
+        self.graph.set_aspect("equal")
 
         self.layers = [LayerVisualization(layer) for layer in mlp_interface.layers]
 
@@ -213,51 +272,56 @@ class MLPVisualization:
             nodes1 = []
             nodes2 = []
             N = layer.width if not layer.overfull else self.maxwidth
+            n = int(N / 2)
             centered = N % 2 == 1
-            c = int(N / 2)
-            y_offset = 0 if centered else -0.5
 
             if layer.overfull:
-                for k in range(count := (c if centered else c - 1)):
-                    y_ord = c - k + y_offset
+                for k in range(n):
+                    y_ord = n - k
                     nodes1.append(Node(i=k, y_ord=y_ord))
                     nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
 
-                layer.count = 2 * count
-
             else:
-                for k in range(count := c):
-                    y_ord = c - k + y_offset
+                y_off = 0 if centered else -0.5
+                for k in range(n):
+                    y_ord = n - k + y_off
                     nodes1.append(Node(i=k, y_ord=y_ord))
                     nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
                 if centered:
                     nodes1.append(Node(i=k + 1, y_ord=0))
-
-                layer.count = layer.width
+                n = 0
 
             nodes2.reverse()
             layer.add_nodes(nodes1)
             layer.add_nodes(nodes2)
 
-            layer._get_activations = activation_func(count, layer.width)
+            layer.visible_activations = n
+
+            coll = PatchCollection(
+                [],
+                transform=self.graph.transData,
+                facecolor="#bdbdbd",
+                linewidth=0,
+                zorder=2,
+            )
+
+            layer.patch_ca = coll
+            self.graph.add_collection(coll)
 
         self.x_minnode = self.layers[0].nodes[0]
         self.x_maxnode = self.layers[-1].nodes[0]
         self.y_maxnode = max(self.layers, key=lambda l: l.width).nodes[0]
 
         weight_len = 0
+        i = 0
         for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
-            (size, layer2._get_edge_weights) = edge_weight_func(
-                layer1.count, layer1.width, layer2.count, layer2.width
-            )
+            size = layer2.make_incoming_edges(layer1)
             weight_len += size
+            i += 1
 
         self.weights = np.empty(weight_len)
 
         self.nodes = [node.node for layer in self.layers for node in layer.nodes]
-        self.activations = [
-            node.activation for layer in self.layers for node in layer.nodes
-        ]
 
         self.edges = []
         for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
@@ -268,32 +332,6 @@ class MLPVisualization:
             layer2.incoming_edges = edges
             self.edges.extend(edges)
 
-        # create mpl objects
-        self.fig = plt.figure()
-
-        # fmt: off
-        axs = self.fig.subplot_mosaic(
-            [
-                ["loss_plot", "empty" ,"box_dxdy", "btn_start"],
-                ["loss_plot", "graph", "graph", "graph"],   
-                ["accuracy_plot", "graph", "graph", "graph"],   
-                ["accuracy_plot", "cbar", "cbar", "cbar"]
-            ], 
-            width_ratios=[1, 0.4, 0.4, 0.4],
-            height_ratios=[
-                5,
-                45,
-                45,
-                5
-            ],
-            empty_sentinel="empty"
-        )
-        # fmt: on
-
-        self.graph = axs["graph"]
-        self.graph.axis("off")
-        self.graph.set_aspect("equal")
-
         self.patch_c = PatchCollection(
             [],
             transform=self.graph.transData,
@@ -301,14 +339,6 @@ class MLPVisualization:
             facecolor="white",
             linewidth=2 * Node.radius,
             zorder=1,
-        )
-
-        self.patch_ca = PatchCollection(
-            [],
-            transform=self.graph.transData,
-            facecolor="#bdbdbd",
-            linewidth=0,
-            zorder=2,
         )
 
         self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=5)
@@ -327,7 +357,6 @@ class MLPVisualization:
                 )
 
         self.graph.add_collection(self.patch_c)
-        self.graph.add_collection(self.patch_ca)
         self.graph.add_collection(self.line_c)
 
         # make controls
@@ -338,30 +367,35 @@ class MLPVisualization:
         self.box_dxdy.set_val(f"{self.dx}, {self.dy}")
         self.btn_start = Button(ax=axs["btn_start"], label="Start")
 
-        # make loss plots
-        self.loss_plot = axs["loss_plot"]
-        self.train_loss_plot = self.loss_plot.plot(
-            [], [], label="Training Loss", color="blue"
-        )[0]
-        self.val_loss_plot = self.loss_plot.plot(
-            [], [], label="Validation Loss", color="red"
-        )[0]
-        self.loss_plot.legend()
-        self.loss_plot.dataLim.x0 = 0
-        self.loss_plot.dataLim.y0 = 0
+        self.img = axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
 
-        # make accuracy plots
-        self.accuracy_plot = axs["accuracy_plot"]
-        self.train_accuracy_plot = self.accuracy_plot.plot(
-            [], [], label="Training Accuracy", color="blue"
-        )[0]
-        self.val_accuracy_plot = self.accuracy_plot.plot(
-            [], [], label="Validation Accuracy", color="red"
-        )[0]
-        self.accuracy_plot.dataLim.x0 = 0
-        self.accuracy_plot.dataLim.y0 = 0
-        self.accuracy_plot.dataLim.y1 = 1
-        self.accuracy_plot.legend()
+        # make loss plots
+        self.loss_plot = None
+        self.accuracy_plot = None
+        if 0:
+            self.loss_plot = axs["loss_plot"]
+            self.train_loss_plot = self.loss_plot.plot(
+                [], [], label="Training Loss", color="blue"
+            )[0]
+            self.val_loss_plot = self.loss_plot.plot(
+                [], [], label="Validation Loss", color="red"
+            )[0]
+            self.loss_plot.legend()
+            self.loss_plot.dataLim.x0 = 0
+            self.loss_plot.dataLim.y0 = 0
+
+            # make accuracy plots
+            self.accuracy_plot = axs["accuracy_plot"]
+            self.train_accuracy_plot = self.accuracy_plot.plot(
+                [], [], label="Training Accuracy", color="blue"
+            )[0]
+            self.val_accuracy_plot = self.accuracy_plot.plot(
+                [], [], label="Validation Accuracy", color="red"
+            )[0]
+            self.accuracy_plot.dataLim.x0 = 0
+            self.accuracy_plot.dataLim.y0 = 0
+            self.accuracy_plot.dataLim.y1 = 1
+            self.accuracy_plot.legend()
 
         # make colorbar
         self.fig.colorbar(
@@ -378,7 +412,7 @@ class MLPVisualization:
 
     def update_weights(self):
         np.concat(
-            tuple((layer.get_edge_weights() for layer in self.layers[1:])),
+            tuple((layer.visible_edge_weights for layer in self.layers[1:])),
             axis=0,
             out=self.weights,
         )
@@ -406,13 +440,26 @@ class MLPVisualization:
         self.graph.autoscale_view()
         self.fig.canvas.draw_idle()
 
-    def update_activations(self):
-        self.patch_ca.set_paths(self.activations)
+    def animate_ff(self):
+
+        frames = 30
+        interval = 0.1
+
+        self.ani = FuncAnimation(
+            self.fig,
+            frames=len(self.layers),
+            func=lambda i: self.layers[i].animate_activation(
+                fig=self.fig, interval=interval, frames=frames
+            ),
+            interval=500,
+            repeat=False,
+        )
+
+        return self.ani
 
     def draw_graph(self):
         for j, layer in enumerate(self.layers):
             layer.draw(j, self.dx, self.dy)
 
         self.patch_c.set_paths(self.nodes)
-        self.patch_ca.set_paths(self.activations)
         self.line_c.set_segments([edge.geometry for edge in self.edges])

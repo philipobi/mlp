@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from itertools import count
 from math import ceil
 from utils import epoch_it
-
+from itertools import cycle
 
 def init_training_data(path, batchsize, valsetsize, epochs):
 
@@ -51,7 +51,7 @@ class LayerInterface:
 class Program:
     batch_windowsize = None
 
-    def __init__(self, model, data_path="data/train.csv"):
+    def __init__(self, data_path="data/train.csv"):
 
         batchsize = 20
         valsetsize = 100
@@ -64,33 +64,33 @@ class Program:
             epochs=epochs,
         )
 
-        self.network = model
+        self.network = ModelSpecLarge()
 
-        self.network.init_training(batchsize=batchsize, validation_set=valset)
+        self.network.load_params("params/large_50epochs_90percent")
+
+        #self.network.init_training(batchsize=batchsize, validation_set=valset)
 
         mlp_interface = MLPInterface(self.network)
 
         MLPVisualization.maxwidth = 11
         self.visualization = MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
+        self.visualization.layers[-1].normalize_activations = False
+
 
         self.ani = None
 
         self.visualization.btn_start.on_clicked(self.start)
 
+        self.examples = cycle([img for img in valset[0]])
+
         plt.show()
-
+    
     def start(self, _):
-        r = Node.radius
-
-        def update(n_frame):
-            for layer in self.visualization.layers:
-                layer.set_activation_rad(n_frame / 60 * 0.7 * r * np.ones(layer.width))
-            self.visualization.update_activations()
-
-        self.ani = FuncAnimation(
-            self.visualization.fig, func=update, frames=60, interval=15
-        )
-
+        X = next(self.examples)
+        self.visualization.img.set_data(-1*X.reshape((28,28))+1)
+        _, vout = self.network.feedforward(X)
+        print(vout)
+        self.ani = self.visualization.animate_ff()
         return
 
         self.train_loss = []
@@ -227,4 +227,4 @@ def ModelSpecSmall():
 
 
 if __name__ == "__main__":
-    Program(model=ModelSpecSmall())
+    Program()
