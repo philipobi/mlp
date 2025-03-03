@@ -11,7 +11,7 @@ from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
-import threading
+from itertools import cycle
 
 # fmt:off
 # red -> green
@@ -53,11 +53,36 @@ def fmt_accuracy(train_accuracy, val_accuracy):
     return f"Accuracy: Train {train_accuracy:0.2f}, Validation {val_accuracy:0.2f}"
 
 
+class cmap:
+    _cmaps = None
+    cmap = None
+    norm = None
+
+    @staticmethod
+    def map(arr):
+        return cmap.cmap(cmap.norm(arr))
+
+    @staticmethod
+    def switch():
+        cmap.cmap = next(cmap._cmaps)
+
+    @staticmethod
+    def set(*cmaps):
+        cmap._cmaps = cycle(cmaps)
+        cmap.cmap = next(cmap._cmaps)
+
+
+class Context:
+    fig = None
+    graph = None
+
+
 class Node:
     radius = None
+    ctx = Context
 
-    def __init__(self, i, y_ord, xy=(0, 0), **kwargs):
-        self.i = i
+    def __init__(self, y_ord, xy=(0, 0), **kwargs):
+        self.label = None
         self.y_ord = y_ord
         self.xy_ = xy
 
@@ -68,6 +93,12 @@ class Node:
         kwargs["radius"] = 0.0
         self.activation = Circle(xy=self.xy_, **kwargs)
 
+    def add_label(self, text):
+        x, y = self.xy
+        self.label = self.ctx.graph.text(
+            s=text, x=x + 1.5 * self.radius, y=y, zorder=3, clip_on=True, va="center"
+        )
+
     @property
     def xy(self):
         return self.xy_
@@ -77,9 +108,14 @@ class Node:
         self.xy_ = value
         self.node.center = self.xy_
         self.activation.center = self.xy_
+        if self.label:
+            x, y = value
+            self.label.set_position(xy=(x + 1.5 * self.radius, y))
 
 
 class Edge:
+    ctx = Context
+
     def __init__(self, node1, node2):
         self.node1 = node1
         self.node2 = node2
@@ -91,15 +127,20 @@ class Edge:
 
 
 class LayerVisualization:
+    ctx = Context
+
     def default_callback(self, event):
         pass
 
     def __init__(self, layer):
         self.layer = layer
         self.width = layer.width
-        self.n = None
 
-        self.overfull = False
+        self.n = None
+        self.m = None
+        self.W_size = 0
+
+        self._overfull = False
         self.overfull_text = None
 
         self.nodes = []
@@ -112,8 +153,6 @@ class LayerVisualization:
         self.normalize_activations = True
 
     def add_nodes(self, nodes):
-        for node in nodes:
-            node.parent = self
         self.nodes.extend(nodes)
         self.activation_circles.extend([node.activation for node in nodes])
 
@@ -131,6 +170,25 @@ class LayerVisualization:
             node.xy = (j * dx, dy * node.y_ord)
         if self.overfull:
             self.overfull_text.set_position((j * dx, 0))
+
+    @property
+    def overfull(self):
+        return self._overfull
+
+    @overfull.setter
+    def overfull(self, value: bool):
+        self._overfull = value
+        if self.overfull and not self.overfull_text:
+            self.overfull_text = self.ctx.graph.text(
+                x=0,
+                y=0,
+                s="...",
+                ha="center",
+                va="center",
+                fontsize=24.0 * Node.radius,
+                color="gray",
+                clip_on=True,
+            )
 
     def set_activation_rad(self, radii):
         for circle, radius in zip(self.activation_circles, radii):
@@ -150,6 +208,11 @@ class LayerVisualization:
         self.n_frames = kwargs["frames"]
         self.ani = FuncAnimation(**kwargs, func=self.animation_update, repeat=False)
 
+    def reset_activation_rad(self):
+        for circle in self.activation_circles:
+            circle.set_radius(0)
+        self.patch_ca.set_paths(self.activation_circles)
+
     @property
     def activations(self):
         return self.layer.activation
@@ -158,24 +221,60 @@ class LayerVisualization:
     def visible_activations(self):
         return self._visible_activations(self.activations)
 
-    @visible_activations.setter
-    def visible_activations(self, n):
+    def set_visible_nodes(self, n, m, previous):
         self.n = n
-        if n == 0:
-            arr = np.empty(self.width)
+        self.m = m
 
-            def func(A):
-                np.divide(A, A.max(), out=arr)
-                return arr
+        if n == m:
+            A_normal = np.empty(self.width)
+
+            def func_A(A):
+                np.divide(A, A.max(), out=A_normal)
+                return A_normal
 
         else:
-            arr = np.empty(2 * n)
+            A_normal = np.empty(m - n)
 
-            def func(A):
-                np.concat((A[: self.n], A[-self.n :]), out=arr)
-                return arr
+            def func_A(A):
+                np.divide(A[n:m], A.max(), out=A_normal)
+                return A_normal
 
-        self._visible_activations = func
+        if previous:
+            n0, m0 = (previous.n, previous.m)
+            i, j = (
+                (self.width if n == m else m - n),
+                (previous.width if n0 == m0 else m0 - n0),
+            )
+
+            W_slice = np.empty((i, j))
+            self.W_size = i * j
+
+            if n == m and n0 == m0:
+
+                def func_W(W):
+                    return np.reshape(W, (-1,), copy=False)
+
+            elif n == m and n0 != m0:
+
+                def func_W(W):
+                    np.copyto(src=W[:, n0:m0], dst=W_slice)
+                    return np.reshape(W_slice, (-1,), copy=False)
+
+            elif n != m and n0 == m0:
+
+                def func_W(W):
+                    np.copyto(src=W[n:m, :], dst=W_slice)
+                    return np.reshape(W_slice, (-1,), copy=False)
+
+            else:
+
+                def func_W(W):
+                    np.copyto(src=W[n:m, n0:m0], dst=W_slice)
+                    return np.reshape(W_slice, (-1,), copy=False)
+
+            self._visible_edge_weights = func_W
+
+        self._visible_activations = func_A
 
     @property
     def weights(self):
@@ -184,45 +283,6 @@ class LayerVisualization:
     @property
     def visible_edge_weights(self):
         return self._visible_edge_weights(self.weights)
-
-    def make_incoming_edges(self, previous):
-        n1 = previous.n
-        n2 = self.n
-
-        c1 = 2 * n1 or previous.width
-        c2 = 2 * n2 or self.width
-
-        size = c1 * c2
-
-        arr = np.empty((c2, c1))
-        arr1 = np.empty((self.width, c1))
-
-        if not (n1 or n2):  # both layers are fully visible
-
-            def func(W):
-                return W.reshape((size,), copy=False)
-
-        elif (not n1) and n2:  # current layer is not fully visible
-
-            def func(W):
-                np.concat((W[:n2, :], W[-n2:, :]), axis=0, out=arr)
-                return arr.reshape((size,), copy=False)
-
-        elif n1 and (not n2):  # previous layer is not fully visible
-
-            def func(W):
-                np.concat((W[:, :n1], W[:, -n1:]), axis=1, out=arr)
-                return arr.reshape((size,), copy=False)
-
-        elif n1 and n2:  # both layers not fully visible
-
-            def func(W):
-                np.concat((W[:, :n1], W[:, -n1:]), axis=1, out=arr1)
-                np.concat((arr1[:n2, :], arr1[-n2:, :]), axis=0, out=arr)
-                return arr.reshape((size,), copy=False)
-
-        self._visible_edge_weights = func
-        return size
 
 
 class MLPVisualization:
@@ -236,7 +296,7 @@ class MLPVisualization:
         # fmt: off
         axs = self.fig.subplot_mosaic(
             [
-                ["empty", "empty" ,"box_dxdy", "btn_start"],
+                ["empty", "btn_cmap" ,"box_dxdy", "btn_start"],
                 ["img", "graph", "graph", "graph"],   
                 ["img", "graph", "graph", "graph"],   
                 ["empty", "cbar", "cbar", "cbar"]
@@ -256,6 +316,9 @@ class MLPVisualization:
         self.graph.axis("off")
         self.graph.set_aspect("equal")
 
+        Context.fig = self.fig
+        Context.graph = self.graph
+
         self.layers = [LayerVisualization(layer) for layer in mlp_interface.layers]
 
         self.dx = dx
@@ -268,34 +331,36 @@ class MLPVisualization:
                 layer.overfull = True
 
         # make nodes
+        previous = None
         for layer in self.layers:
             nodes1 = []
             nodes2 = []
             N = layer.width if not layer.overfull else self.maxwidth
             n = int(N / 2)
-            centered = N % 2 == 1
 
             if layer.overfull:
                 for k in range(n):
                     y_ord = n - k
-                    nodes1.append(Node(i=k, y_ord=y_ord))
-                    nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
+                    nodes1.append(Node(y_ord))
+                    nodes2.append(Node(-y_ord))
+
+                w = int(layer.width / 2)
+                layer.set_visible_nodes(n=w - n, m=w + n - 1, previous=previous)
 
             else:
+                centered = N % 2 == 1
                 y_off = 0 if centered else -0.5
                 for k in range(n):
                     y_ord = n - k + y_off
-                    nodes1.append(Node(i=k, y_ord=y_ord))
-                    nodes2.append(Node(i=(layer.width - 1) - k, y_ord=-y_ord))
+                    nodes1.append(Node(y_ord))
+                    nodes2.append(Node(-y_ord))
                 if centered:
-                    nodes1.append(Node(i=k + 1, y_ord=0))
-                n = 0
+                    nodes1.append(Node(y_ord=0))
+                layer.set_visible_nodes(n=0, m=0, previous=previous)
 
             nodes2.reverse()
             layer.add_nodes(nodes1)
             layer.add_nodes(nodes2)
-
-            layer.visible_activations = n
 
             coll = PatchCollection(
                 [],
@@ -308,18 +373,13 @@ class MLPVisualization:
             layer.patch_ca = coll
             self.graph.add_collection(coll)
 
+            previous = layer
+
         self.x_minnode = self.layers[0].nodes[0]
         self.x_maxnode = self.layers[-1].nodes[0]
         self.y_maxnode = max(self.layers, key=lambda l: l.width).nodes[0]
 
-        weight_len = 0
-        i = 0
-        for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
-            size = layer2.make_incoming_edges(layer1)
-            weight_len += size
-            i += 1
-
-        self.weights = np.empty(weight_len)
+        self.weights = np.empty(sum([layer.W_size for layer in self.layers]))
 
         self.nodes = [node.node for layer in self.layers for node in layer.nodes]
 
@@ -337,24 +397,11 @@ class MLPVisualization:
             transform=self.graph.transData,
             edgecolor="#bdbdbd",
             facecolor="white",
-            linewidth=2 * Node.radius,
+            linewidth=Node.radius,
             zorder=1,
         )
 
-        self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=5)
-
-        for layer in self.layers:
-            if layer.overfull:
-                layer.overfull_text = self.graph.text(
-                    x=0,
-                    y=0,
-                    s="...",
-                    ha="center",
-                    va="center",
-                    fontsize=24.0 * Node.radius,
-                    color="gray",
-                    clip_on=True,
-                )
+        self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=2)
 
         self.graph.add_collection(self.patch_c)
         self.graph.add_collection(self.line_c)
@@ -397,18 +444,26 @@ class MLPVisualization:
             self.accuracy_plot.dataLim.y1 = 1
             self.accuracy_plot.legend()
 
-        # make colorbar
-        self.fig.colorbar(
-            mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=cmap),
-            cax=axs["cbar"],
-            orientation="horizontal",
-            label=r"$\text{LogNorm}(W_{ij})$",
-        )
-
-        self.norm = SymLogNorm(linthresh=0.03)
+        # setup cmap and cbar
+        cmap.set(mpl.colormaps["viridis"], ListedColormap(colors=colors))
+        cmap.norm = SymLogNorm(linthresh=0.03)
+        self.cbar_ax = axs["cbar"]
+        self.make_cbar()
+        
+        #add button for switching cbar
+        self.btn_cmap = Button(ax=axs["btn_cmap"], label="Switch cmap")
+        self.btn_cmap.on_clicked(self.switch_cmap)
 
         # init weight colors
         self.update_weights()
+
+    def make_cbar(self):
+        self.cbar = self.fig.colorbar(
+            mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=cmap.cmap),
+            cax=self.cbar_ax,
+            orientation="horizontal",
+            label=r"$\text{LogNorm}(W_{ij})$",
+        )
 
     def update_weights(self):
         np.concat(
@@ -417,11 +472,16 @@ class MLPVisualization:
             out=self.weights,
         )
 
-        self.norm.vmin = self.weights.min()
-        self.norm.vmax = self.weights.max()
+        cmap.norm.vmin = self.weights.min()
+        cmap.norm.vmax = self.weights.max()
 
-        self.line_c.set_colors(cmap(self.norm(self.weights)))
-        # self.line_c.set_colors(cmap(1 / (1 + np.exp(-self.weights))))
+        self.line_c.set_colors(cmap.map(self.weights))
+        # self.line_c.set_colors(cmap.cmap(1 / (1 + np.exp(-self.weights))))
+
+    def switch_cmap(self, _=None):
+        cmap.switch()
+        self.make_cbar()
+        self.update_weights()
 
     def update_geometry(self, val):
         dx, dy = self.box_dxdy.text.split(",")
@@ -456,6 +516,10 @@ class MLPVisualization:
         )
 
         return self.ani
+
+    def clear_activations(self):
+        for layer in self.layers:
+            layer.reset_activation_rad()
 
     def draw_graph(self):
         for j, layer in enumerate(self.layers):

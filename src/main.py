@@ -72,10 +72,11 @@ class Program:
 
         mlp_interface = MLPInterface(self.network)
 
-        MLPVisualization.maxwidth = 11
-        self.visualization = MLPVisualization(mlp_interface, dx=10, dy=3, r=1)
+        MLPVisualization.maxwidth = 20
+        self.visualization = MLPVisualization(mlp_interface, dx=10, dy=5, r=2)
         self.visualization.layers[-1].normalize_activations = False
-
+        for i, node in enumerate(self.visualization.layers[-1].nodes):
+            node.add_label(f"{i}")
 
         self.ani = None
 
@@ -86,10 +87,10 @@ class Program:
         plt.show()
     
     def start(self, _):
+        self.visualization.clear_activations()
         X = next(self.examples)
         self.visualization.img.set_data(-1*X.reshape((28,28))+1)
         _, vout = self.network.feedforward(X)
-        print(vout)
         self.ani = self.visualization.animate_ff()
         return
 
