@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Rectangle
 from matplotlib.collections import PatchCollection, LineCollection
 from matplotlib.colors import (
     LinearSegmentedColormap,
@@ -11,7 +11,11 @@ from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
-from itertools import cycle
+from itertools import cycle, chain
+import time
+from threading import Barrier
+
+PatchCollection.update_objects = lambda self: self.set_paths(self.objects)
 
 # fmt:off
 # red -> green
@@ -38,8 +42,65 @@ colors= [
     (0.03137255, 0.40784314, 0.1254902,),
 ]
 # fmt:on
-cmap = ListedColormap(colors=colors)
-cmap = mpl.colormaps["viridis"]
+
+
+transitionLinear = lambda i: i
+
+
+class Iterator:
+    def __iter__(self):
+        return self
+
+
+class flatten(Iterator):
+    def __init__(self, it, dim):
+        if not dim > 0:
+            raise ValueError("Dimension must be greater than 0")
+        self.dim = dim
+        self.its = [iter(it)]
+
+    def __next__(self):
+        try:
+            while len(self.its) != self.dim:
+                self.its.append(iter(next(self.its[-1])))
+            return next(self.its[-1])
+        except StopIteration:
+            if len(self.its) == 1:
+                raise
+            self.its.pop()
+            return next(self)
+
+
+class AnimationSpec:
+    def __init__(self, func, transition, frames):
+        self.func = func
+        self.transition = transition
+        self.frames = frames
+
+
+class AnimationIterator(Iterator):
+    def __init__(self, spec_it):
+        self.ani = iter(spec_it)
+        self.spec = None
+        self.completed = False
+
+    def __next__(self):
+        if self.spec is None:
+            self.spec = next(self.ani)
+            self.it = iter(range(1, self.spec.frames + 1))
+            return next(self)
+        else:
+            try:
+                i = self.spec.transition(next(self.it) / self.spec.frames)
+                self.spec.func(i)
+                return None
+            except StopIteration:
+                self.spec = None
+            return next(self)
+
+
+colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
+nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 
 
 def parse_float(s, default=None):
@@ -75,6 +136,8 @@ class cmap:
 class Context:
     fig = None
     graph = None
+    dx = None
+    dy = None
 
 
 class Node:
@@ -82,21 +145,18 @@ class Node:
     ctx = Context
 
     def __init__(self, y_ord, xy=(0, 0), **kwargs):
+        self.parent = None
         self.label = None
         self.y_ord = y_ord
         self.xy_ = xy
 
-        if kwargs.get("radius", None) is None:
-            kwargs["radius"] = self.radius
-
-        self.node = Circle(xy=self.xy_, **kwargs)
-        kwargs["radius"] = 0.0
-        self.activation = Circle(xy=self.xy_, **kwargs)
+        self.node = Circle(xy=self.xy_, radius=Node.radius, **kwargs)
+        self.activation = Circle(xy=self.xy_, radius=0, **kwargs)
 
     def add_label(self, text):
         x, y = self.xy
         self.label = self.ctx.graph.text(
-            s=text, x=x + 1.5 * self.radius, y=y, zorder=3, clip_on=True, va="center"
+            s=str(text), x=x + 2 * Node.radius, y=y, zorder=3, clip_on=True, va="center"
         )
 
     @property
@@ -110,7 +170,24 @@ class Node:
         self.activation.center = self.xy_
         if self.label:
             x, y = value
-            self.label.set_position(xy=(x + 1.5 * self.radius, y))
+            self.label.set_position(xy=(x + 1.5 * Node.radius, y))
+
+
+class OverfullIndicator:
+    def __init__(self):
+        self.node = Circle(xy=(0, 0), radius=Node.radius)
+        self.circles = [Circle(xy=(0, 0), radius=Node.radius / 8) for _ in range(3)]
+
+    @property
+    def xy(self):
+        return self.node.center
+
+    @xy.setter
+    def xy(self, xy):
+        x, y = xy
+        self.node.center = (x, y)
+        for i, circle in enumerate(self.circles, start=-1):
+            circle.center = (x + i * Node.radius / 2, y)
 
 
 class Edge:
@@ -119,7 +196,6 @@ class Edge:
     def __init__(self, node1, node2):
         self.node1 = node1
         self.node2 = node2
-        self.weight = 0
 
     @property
     def geometry(self):
@@ -129,47 +205,73 @@ class Edge:
 class LayerVisualization:
     ctx = Context
 
-    def default_callback(self, event):
-        pass
-
-    def __init__(self, layer):
+    def __init__(self, layer, i):
+        self.previous = None
+        self.i = i
         self.layer = layer
         self.width = layer.width
+
+        self.normalize_activations = True
 
         self.n = None
         self.m = None
         self.W_size = 0
 
         self._overfull = False
-        self.overfull_text = None
+        self.overfull_ind = None
+        self.annotated = False
 
         self.nodes = []
-        self.incoming_edges = []
-        self.activation_circles = []
-        self._patch_ca = None
+        self.bbox = self.ctx.graph.add_patch(
+            Rectangle(
+                xy=(0, 0),
+                width=0,
+                height=0,
+                facecolor="none",
+                edgecolor="#bdbdbd",
+                alpha=0.0,
+            )
+        )
+
+        self.node_activations = PatchCollection(
+            [],
+            transform=self.ctx.graph.transData,
+            facecolor="black",
+            linewidth=0,
+            zorder=2,
+        )
+        self.node_activations.objects = []
 
         self._visible_edge_weights = lambda W: None
         self._visible_activations = lambda A: None
-        self.normalize_activations = True
 
     def add_nodes(self, nodes):
+        for node in nodes:
+            node.parent = self
         self.nodes.extend(nodes)
-        self.activation_circles.extend([node.activation for node in nodes])
+        self.node_activations.objects.extend([node.activation for node in nodes])
 
-    @property
-    def patch_ca(self):
-        return self._patch_ca
+    def annotate(self, labels):
+        self.annotated = True
+        for node, label in zip(self.nodes, labels):
+            node.add_label(label)
 
-    @patch_ca.setter
-    def patch_ca(self, coll):
-        self._patch_ca = coll
-        self._patch_ca.set_paths(self.activation_circles)
-
-    def draw(self, j, dx, dy):
+    def draw(self):
         for node in self.nodes:
-            node.xy = (j * dx, dy * node.y_ord)
+            node.xy = (self.i * self.ctx.dx, self.ctx.dy * node.y_ord)
+
+        r = Node.radius
+        pad = r / 2
+        x0, y0 = self.nodes[-1].xy
+        x1, y1 = self.nodes[0].xy
+        self.bbox.set_xy((x0 - r - pad, y0 - r - pad))
+        self.bbox.set_height(y1 - y0 + 2 * r + 2 * pad)
+        self.bbox.set_width(x1 - x0 + 2 * r + 2 * pad)
+
+        self.node_activations.update_objects()
+
         if self.overfull:
-            self.overfull_text.set_position((j * dx, 0))
+            self.overfull_ind.xy = (self.i * self.ctx.dx, 0)
 
     @property
     def overfull(self):
@@ -178,40 +280,45 @@ class LayerVisualization:
     @overfull.setter
     def overfull(self, value: bool):
         self._overfull = value
-        if self.overfull and not self.overfull_text:
-            self.overfull_text = self.ctx.graph.text(
-                x=0,
-                y=0,
-                s="...",
-                ha="center",
-                va="center",
-                fontsize=24.0 * Node.radius,
-                color="gray",
-                clip_on=True,
-            )
+        if self.overfull and not self.overfull_ind:
+            self.overfull_ind = OverfullIndicator()
 
     def set_activation_rad(self, radii):
-        for circle, radius in zip(self.activation_circles, radii):
+        for circle, radius in zip(self.node_activations.objects, radii):
             circle.set_radius(radius)
 
-    def animation_update(self, n_frame):
-        normalized_activations = (
-            self.visible_activations / self.activations.max()
-            if self.normalize_activations
-            else self.visible_activations
-        )
-        factor = n_frame / self.n_frames * Node.radius * 0.9
-        self.set_activation_rad(factor * normalized_activations)
-        self.patch_ca.set_paths(self.activation_circles)
-
-    def animate_activation(self, **kwargs):
-        self.n_frames = kwargs["frames"]
-        self.ani = FuncAnimation(**kwargs, func=self.animation_update, repeat=False)
-
     def reset_activation_rad(self):
-        for circle in self.activation_circles:
+        for circle in self.node_activations.objects:
             circle.set_radius(0)
-        self.patch_ca.set_paths(self.activation_circles)
+        self.node_activations.update_objects()
+
+    def animate_activation(self, frames):
+        arr = np.empty_like(self.visible_activations)
+        arr1 = np.empty_like(self.visible_activations)
+        (
+            np.divide(self.visible_activations, self.activations.max(), out=arr)
+            if self.normalize_activations
+            else np.copyto(src=self.activations, dst=arr)
+        )
+
+        def func(i):
+            np.multiply(arr, i * Node.radius * 0.9, out=arr1)
+            self.set_activation_rad(arr1)
+            self.node_activations.update_objects()
+
+        yield from [
+            AnimationSpec(
+                func=lambda i: self.bbox.set_alpha(i),
+                transition=transitionLinear,
+                frames=20,
+            ),
+            AnimationSpec(func=func, transition=transitionLinear, frames=frames),
+            AnimationSpec(
+                func=lambda i: self.bbox.set_alpha(1 - i),
+                transition=transitionLinear,
+                frames=20,
+            ),
+        ]
 
     @property
     def activations(self):
@@ -221,29 +328,23 @@ class LayerVisualization:
     def visible_activations(self):
         return self._visible_activations(self.activations)
 
-    def set_visible_nodes(self, n, m, previous):
+    def set_visible_nodes(self, n, m):
         self.n = n
         self.m = m
 
         if n == m:
-            A_normal = np.empty(self.width)
-
             def func_A(A):
-                np.divide(A, A.max(), out=A_normal)
-                return A_normal
+                return A
 
         else:
-            A_normal = np.empty(m - n)
-
             def func_A(A):
-                np.divide(A[n:m], A.max(), out=A_normal)
-                return A_normal
+                return A[n:m]
 
-        if previous:
-            n0, m0 = (previous.n, previous.m)
+        if self.previous:
+            n0, m0 = (self.previous.n, self.previous.m)
             i, j = (
                 (self.width if n == m else m - n),
-                (previous.width if n0 == m0 else m0 - n0),
+                (self.previous.width if n0 == m0 else m0 - n0),
             )
 
             W_slice = np.empty((i, j))
@@ -252,7 +353,8 @@ class LayerVisualization:
             if n == m and n0 == m0:
 
                 def func_W(W):
-                    return np.reshape(W, (-1,), copy=False)
+                    np.copyto(src=W, dst=W_slice)
+                    return np.reshape(W_slice, (-1,), copy=False)
 
             elif n == m and n0 != m0:
 
@@ -318,11 +420,12 @@ class MLPVisualization:
 
         Context.fig = self.fig
         Context.graph = self.graph
+        Context.dx = dx
+        Context.dy = dy
 
-        self.layers = [LayerVisualization(layer) for layer in mlp_interface.layers]
-
-        self.dx = dx
-        self.dy = dy
+        self.layers = [
+            LayerVisualization(layer, i) for i, layer in enumerate(mlp_interface.layers)
+        ]
 
         Node.radius = r
 
@@ -333,6 +436,7 @@ class MLPVisualization:
         # make nodes
         previous = None
         for layer in self.layers:
+            layer.previous = previous
             nodes1 = []
             nodes2 = []
             N = layer.width if not layer.overfull else self.maxwidth
@@ -345,7 +449,7 @@ class MLPVisualization:
                     nodes2.append(Node(-y_ord))
 
                 w = int(layer.width / 2)
-                layer.set_visible_nodes(n=w - n, m=w + n - 1, previous=previous)
+                layer.set_visible_nodes(n=w - n, m=w + n - 1)
 
             else:
                 centered = N % 2 == 1
@@ -356,43 +460,24 @@ class MLPVisualization:
                     nodes2.append(Node(-y_ord))
                 if centered:
                     nodes1.append(Node(y_ord=0))
-                layer.set_visible_nodes(n=0, m=0, previous=previous)
+                layer.set_visible_nodes(n=0, m=0)
 
             nodes2.reverse()
             layer.add_nodes(nodes1)
             layer.add_nodes(nodes2)
 
-            coll = PatchCollection(
-                [],
-                transform=self.graph.transData,
-                facecolor="#bdbdbd",
-                linewidth=0,
-                zorder=2,
-            )
-
-            layer.patch_ca = coll
-            self.graph.add_collection(coll)
-
             previous = layer
+
+        bbox = max(self.layers, key=lambda l: l.width).bbox
+        self.ylim = lambda: (y := bbox.get_y() and None) or (y, y + bbox.get_height())
 
         self.x_minnode = self.layers[0].nodes[0]
         self.x_maxnode = self.layers[-1].nodes[0]
-        self.y_maxnode = max(self.layers, key=lambda l: l.width).nodes[0]
+        self.y_maxlayer = max(self.layers, key=lambda l: l.width).nodes[0]
 
         self.weights = np.empty(sum([layer.W_size for layer in self.layers]))
 
-        self.nodes = [node.node for layer in self.layers for node in layer.nodes]
-
-        self.edges = []
-        for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
-            edges = []
-            for node_in in layer2.nodes:
-                for node_out in layer1.nodes:
-                    edges.append(Edge(node_out, node_in))
-            layer2.incoming_edges = edges
-            self.edges.extend(edges)
-
-        self.patch_c = PatchCollection(
+        self.nodes = PatchCollection(
             [],
             transform=self.graph.transData,
             edgecolor="#bdbdbd",
@@ -401,17 +486,45 @@ class MLPVisualization:
             zorder=1,
         )
 
-        self.line_c = LineCollection([], color="#bdbdbd", zorder=-1, linewidth=2)
+        nodes = [node.node for layer in self.layers for node in layer.nodes]
+        nodes.extend(
+            [layer.overfull_ind.node for layer in self.layers if layer.overfull]
+        )
+        self.nodes.objects = nodes
 
-        self.graph.add_collection(self.patch_c)
-        self.graph.add_collection(self.line_c)
+        self.overfull_dots = PatchCollection(
+            [], zorder=2, facecolor="#bdbdbd", edgecolor="none"
+        )
+        overfull_dots = [
+            circle
+            for layer in self.layers
+            if layer.overfull
+            for circle in layer.overfull_ind.circles
+        ]
+        self.overfull_dots.objects = overfull_dots
+
+        self.edges = LineCollection([], color="#bdbdbd", zorder=0, linewidth=2)
+        edges = []
+        for layer1, layer2 in zip(self.layers[:-1], self.layers[1:]):
+            _edges = []
+            for node_in in layer2.nodes:
+                for node_out in layer1.nodes:
+                    _edges.append(Edge(node_out, node_in))
+            edges.extend(_edges)
+        self.edges.objects = edges
+
+        self.graph.add_collection(self.nodes)
+        self.graph.add_collection(self.edges)
+        self.graph.add_collection(self.overfull_dots)
+        for layer in self.layers:
+            self.graph.add_collection(layer.node_activations)
 
         # make controls
         self.box_dxdy = TextBox(
             ax=axs["box_dxdy"], label="(dx, dy)", textalignment="left"
         )
         self.box_dxdy.on_submit(self.update_geometry)
-        self.box_dxdy.set_val(f"{self.dx}, {self.dy}")
+        self.box_dxdy.set_val(f"{Context.dx}, {Context.dy}")
         self.btn_start = Button(ax=axs["btn_start"], label="Start")
 
         self.img = axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
@@ -445,17 +558,26 @@ class MLPVisualization:
             self.accuracy_plot.legend()
 
         # setup cmap and cbar
-        cmap.set(mpl.colormaps["viridis"], ListedColormap(colors=colors))
+        cmap.set(
+            mpl.colormaps["viridis"],
+            #LinearSegmentedColormap.from_list("cmap", list(zip(nodes, colors))),
+            mpl.colormaps["Pastel1"],
+        )
+
         cmap.norm = SymLogNorm(linthresh=0.03)
         self.cbar_ax = axs["cbar"]
         self.make_cbar()
-        
-        #add button for switching cbar
+
+        # add button for switching cbar
         self.btn_cmap = Button(ax=axs["btn_cmap"], label="Switch cmap")
         self.btn_cmap.on_clicked(self.switch_cmap)
 
         # init weight colors
         self.update_weights()
+
+    @property
+    def bbox(self):
+        y0, y1 = self.ylim()
 
     def make_cbar(self):
         self.cbar = self.fig.colorbar(
@@ -475,7 +597,7 @@ class MLPVisualization:
         cmap.norm.vmin = self.weights.min()
         cmap.norm.vmax = self.weights.max()
 
-        self.line_c.set_colors(cmap.map(self.weights))
+        self.edges.set_colors(cmap.map(self.weights))
         # self.line_c.set_colors(cmap.cmap(1 / (1 + np.exp(-self.weights))))
 
     def switch_cmap(self, _=None):
@@ -483,36 +605,58 @@ class MLPVisualization:
         self.make_cbar()
         self.update_weights()
 
-    def update_geometry(self, val):
+    def update_geometry(self, _):
         dx, dy = self.box_dxdy.text.split(",")
-        self.dx = parse_float(dx, default=self.dx)
-        self.dy = parse_float(dy, default=self.dy)
+        Context.dx = parse_float(dx, default=Context.dx)
+        Context.dy = parse_float(dy, default=Context.dy)
 
         self.draw_graph()
-        x_min = self.x_minnode.node.get_extents().xmin
-        x_max = self.x_maxnode.node.get_extents().xmax
-        y_max = self.y_maxnode.node.get_extents().ymax
-        y_min = -y_max
-        self.graph.dataLim.x0 = x_min
-        self.graph.dataLim.y0 = y_min
-        self.graph.dataLim.x1 = x_max
-        self.graph.dataLim.y1 = y_max
+
+        self.fig.draw_without_rendering()
+
+        bbox = max(self.layers, key=lambda l: l.width).bbox
+        _, y0 = bbox.xy
+        y1 = y0 + bbox.get_height()
+        x0, _ = self.layers[0].bbox.xy
+
+        layer = self.layers[-1]
+        if layer.annotated:
+            inv = self.graph.transData.inverted()
+            x1 = max(
+                map(
+                    lambda node: inv.transform(node.label.get_window_extent())[1, 0],
+                    layer.nodes,
+                )
+            )
+        else:
+            x, _ = layer.bbox.xy
+            x1 = x + layer.bbox.get_width()
+
+        self.graph.dataLim.x0 = x0
+        self.graph.dataLim.y0 = y0
+        self.graph.dataLim.x1 = x1
+        self.graph.dataLim.y1 = y1
         self.graph.autoscale_view()
         self.fig.canvas.draw_idle()
 
     def animate_ff(self):
 
         frames = 30
-        interval = 0.1
+        interval = 0.05
 
+        frames = AnimationIterator(
+            flatten(
+                map(lambda layer: layer.animate_activation(frames=30), self.layers),
+                dim=2,
+            )
+        )
         self.ani = FuncAnimation(
             self.fig,
-            frames=len(self.layers),
-            func=lambda i: self.layers[i].animate_activation(
-                fig=self.fig, interval=interval, frames=frames
-            ),
-            interval=500,
+            frames=frames,
+            func=lambda _: None,
+            interval=0.05,
             repeat=False,
+            cache_frame_data=False,
         )
 
         return self.ani
@@ -522,8 +666,11 @@ class MLPVisualization:
             layer.reset_activation_rad()
 
     def draw_graph(self):
-        for j, layer in enumerate(self.layers):
-            layer.draw(j, self.dx, self.dy)
+        for layer in self.layers:
+            layer.draw()
 
-        self.patch_c.set_paths(self.nodes)
-        self.line_c.set_segments([edge.geometry for edge in self.edges])
+        self.nodes.update_objects()
+
+        self.edges.set_segments([edge.geometry for edge in self.edges.objects])
+
+        self.overfull_dots.update_objects()

@@ -9,6 +9,7 @@ from math import ceil
 from utils import epoch_it
 from itertools import cycle
 
+
 def init_training_data(path, batchsize, valsetsize, epochs):
 
     data = np.loadtxt(path, skiprows=1, delimiter=",", dtype=int)
@@ -64,9 +65,9 @@ class Program:
             epochs=epochs,
         )
 
-        self.network = ModelSpecLarge()
+        self.network = ModelSpecSmall()
 
-        self.network.load_params("params/large_50epochs_90percent")
+        self.network.load_params("params/small_50epochs_93percent")
 
         #self.network.init_training(batchsize=batchsize, validation_set=valset)
 
