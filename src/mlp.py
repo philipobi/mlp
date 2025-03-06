@@ -2,7 +2,6 @@ import numpy as np
 from utils import Activation, ReLU, Softmax, Adam
 import os.path
 
-
 class MLogit:
     class Logloss:
         def init_training(self, output_shape):
@@ -481,12 +480,25 @@ class MLP:
     def feedforward(self, x):
         self._feedforward(x)
         return (np.argmax(self.output_layer.A), self.output_layer.A)
+    
+
+class LayerWrapper:
+    def __init__(self):
+        ...
+
+
+class LossProjection:
+    def __init__(self, layers, ax1, ax2, valset):
+        self.layers = layers
+        
+    def alloc(self, valset):
+        pass
 
 
 class ParameterAxis:
-    def __init__(self, layer_i, type, pos, d, N):
+    def __init__(self, layer, type, pos, d, N):
         self.range = None
-        self.layer_i = layer_i
+        self.layer = layer
 
         self.d = d
         self.N = N
