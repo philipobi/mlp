@@ -1,6 +1,7 @@
 import numpy as np
 from main import init_training_data
 import os.path
+from time import sleep
 
 
 class ff:
@@ -17,13 +18,16 @@ class bprop:
     def malloc(self, dJdz_p1, W_p1, A_m1, s_deriv):
         self.dJdz_ = np.einsum("...j,...ij->...i", dJdz_p1, W_p1)
         self.dJdz = np.multiply(s_deriv, self.dJdz_)
-        self.dJdW = np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :])
-        self.dJdb = self.dJdz
+        self.dJdW_ = np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :])
+        self.dJdW = np.sum(self.dJdW_, axis=-3)
+        self.dJdb = np.sum(self.dJdz, axis=-2)
 
     def run(self, dJdz_p1, W_p1, A_m1, s_deriv):
         np.einsum("...j,...ij->...i", dJdz_p1, W_p1, out=self.dJdz_)
         np.multiply(s_deriv, self.dJdz_, out=self.dJdz)
-        np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW)
+        np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW_)
+        np.sum(self.dJdW_, axis=-3, out=self.dJdW)
+        np.sum(self.dJdz, axis=-2, out=self.dJdb)
 
 
 class relu:
@@ -125,8 +129,9 @@ class mlogit:
         self.dJdz[..., self.index_, Y] -= 1
 
         # compute derivatives wrt. parameters
-        self.dJdW = np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :])
-        self.dJdb = self.dJdz
+        self.dJdW_ = np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :])
+        self.dJdW = np.sum(self.dJdW_, axis=-3)
+        self.dJdb = np.sum(self.dJdz, axis=-2)
 
     def run(self, Z, Y, A_m1):
         # compute batch loss
@@ -148,7 +153,11 @@ class mlogit:
         self.dJdz[..., self.index_, Y] -= 1
 
         # compute derivatives wrt. parameters
-        np.multiply(A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW)
+        np.multiply(
+            A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW_
+        )
+        np.sum(self.dJdW_, axis=-3, out=self.dJdW)
+        np.sum(self.dJdz, axis=-2, out=self.dJdb)
 
 
 class Layer:
@@ -170,8 +179,10 @@ def main():
         l.previous = previous
         previous.next = l
 
-        l.W = np.load(os.path.join(path, f"W{n}.npy"))
-        l.b = np.load(os.path.join(path, f"b{n}.npy"))
+        # l.W = np.load(os.path.join(path, f"W{n}.npy"))
+        # l.b = np.load(os.path.join(path, f"b{n}.npy"))
+        l.W = np.random.rand(i,j)
+        l.b = np.random.rand(j)
         l.ff = ff()
         l.bprop = bprop()
         l.act = relu()
@@ -180,12 +191,16 @@ def main():
         previous = l
 
     model = mlogit()
-    
+
     W = [layer.W for layer in layers]
 
     b = [layer.b for layer in layers]
 
     layer_out = layers.pop()
+
+    (N, it, valset) = init_training_data(
+        "data/train.csv", batchsize=20, valsetsize=50, epochs=1
+    )
 
     # malloc
     (X, Y) = next(it)
@@ -195,8 +210,8 @@ def main():
         layer.act.malloc(layer.ff.Z)
 
     layer_out.ff.malloc(layer.act.A, layer_out.W, layer_out.b)
-    
-    model.malloc(layer_out.ff.Z, Y)
+
+    model.malloc(layer_out.ff.Z, Y, layer.act.A)
 
     dJdz_p1 = model.dJdz
     for layer in layers[::-1]:
@@ -205,19 +220,15 @@ def main():
 
     dJdW = [layer.bprop.dJdW for layer in layers]
     dJdW.append(model.dJdW)
-    
+
     dJdb = [layer.bprop.dJdb for layer in layers]
     dJdb.append(model.dJdb)
 
-    optimizer = adam(b1=0.9, b2=0.999, eps=10e-8, alpha=0.001)
+    optimizer = adam(b1=0.9, b2=0.999, eps=1e-8, alpha=0.1)
     optimizer.malloc(dJdW, dJdb)
 
-    
-    (N, it, valset) = init_training_data(
-        "data/train.csv", batchsize=20, valsetsize=50, epochs=1
-    )
-    
-    
+    # train
+
     for X, Y in it:
         # inference
         layer_in.act.A = X
@@ -226,14 +237,16 @@ def main():
             layer.act.run(layer.ff.Z)
 
         layer_out.ff.run(layer.act.A, layer_out.W, layer_out.b)
-        
+
         model.run(layer_out.ff.Z, Y, layer.act.A)
-        print(model.loss)
-        
+        print(model.loss[0], end='\r')
+
         # bprop
         dJdz_p1 = model.dJdz
         for layer in layers[::-1]:
-            layer.bprop.run(dJdz_p1, layer.next.W, layer.act.deriv)
+            layer.bprop.run(
+                dJdz_p1, layer.next.W, layer.previous.act.A, layer.act.deriv
+            )
             dJdz_p1 = layer.bprop.dJdz
 
         # optimize params
@@ -241,5 +254,8 @@ def main():
         for tup in [(W, optimizer.dW), (b, optimizer.db)]:
             for t, dt in zip(*tup):
                 np.add(t, dt, out=t)
+
+        sleep(0.1)
+
 
 main()
