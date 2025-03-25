@@ -1,5 +1,5 @@
 import numpy as np
-from mlp1 import LayerWrapper, mlogit, ff, relu
+from mlp1 import LayerWrapper, pipeline
 
 class ProjectionAxis:
     def __init__(self, arr, pos, num, d):
@@ -17,376 +17,85 @@ class ProjectionAxis:
     def redraw_ax(self, all=False):
         if all:
             self.arr_ax = np.repeat(self.arr[np.newaxis], axis=0, repeats=self.num)
-        x0 = self.arr[..., *self.pos]
+        x0 = self.arr[*self.pos]
         self.xmin = x0 - self.d
         self.xmax = x0 + self.d
-        self.arr_ax[:, ..., *self.pos] = np.linspace(self.xmin, self.xmax, num=self.num)
+        self.arr_ax[..., *self.pos].reshape(-1, copy=False)[:] = np.linspace(self.xmin, self.xmax, num=self.num)
 
 class ProjectionLayer(LayerWrapper):
-    def __init__(self, layer, W=None, b=None):
+    def __init__(self, layer):
         super().__init__(layer)
+        self.ax_W = None
+        self.ax_b = None
 
-        self.redraw_hooks = []
+        self.W_ = np.copy(self.layer.W)
+        self.W_getter = lambda: self.W_
+        self.W_redraw = lambda: np.copyto(src=self.layer.W, dst=self.W_)
+
+        self.b_ = np.copy(self.layer.b)
+        self.b_getter = lambda: self.b_
+        self.b_redraw = lambda: np.copyto(src=self.layer.b, dst=self.b_)
+
+    def add_axes(self, W=None, b=None):
         self.ax_W = W
         self.ax_b = b
-
-        if W is None:
-            self.W_ = np.copy(self.layer.W)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.W, dst=self.W_))
-            self.W_getter = lambda: self.W_
-        else:
-            self.redraw_hooks.append(lambda: W.redraw_ax(all=True))
+        
+        if W:
+            self.W_redraw = lambda: W.redraw_ax(all=True)
             self.W_getter = lambda: W.arr_ax
 
-        if b is None:
-            self.b_ = np.copy(self.layer.b)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.b, dst=self.b_))
-            self.b_getter = lambda: self.b_
-        else:
-            self.redraw_hooks.append(lambda: b.redraw_ax(all=True))
+        if b:
+            self.b_redraw = lambda: b.redraw_ax(all=True)
             self.b_getter = lambda: b.arr_ax
+            W_getter = self.W_getter
+            self.W_getter = lambda: np.expand_dims(W_getter(), axis=(1 if W else 0))
 
     def redraw_all(self):
-        for fn in self.redraw_hooks:
-            fn()
+        self.W_redraw()
+        self.b_redraw()
 
     @property
     def W(self):
         return self.W_getter()
+    
+    @W.setter
+    def W(self, _):
+        return
 
     @property
     def b(self):
         return self.b_getter()
+    
+    @b.setter
+    def b(self, _):
+        return
 
 
 class ProjectionGrid:
     def __init__(self, layers, X, Y):
         self.X = X
         self.Y = Y
-        self.model = mlogit()
 
         self.axes = []
+        
         self.axes.extend([ax for layer in layers if (ax := layer.ax_W) is not None])
         self.axes.extend([ax for layer in layers if (ax := layer.ax_b) is not None])
 
-        self.layers = layers[:-1]
-        self.layer_out = layers[-1]
-
-        for layer in self.layers:
-            layer.ff = ff()
-            layer.act = relu()
-
-        self.layer_out.ff = ff()
+        self.pipeline = pipeline(layers)
+        self.layers = layers
 
     def compute(self):
         for ax in self.axes:
             if not ax.in_range:
                 ax.redraw()
 
-        A = self.X
-        for layer in self.layers:
-            layer.ff.run(A, layer.W, layer.b)
-            layer.act.run(ff.Z)
-            A = layer.act.A
-
-        layer = self.layer_out
-        layer.ff.run(A, layer.W, layer.b)
-        self.model.run(layer.Z, A, self.Y, bprop=False)
-
-    @property
-    def grid(self):
-      class ProjectionAxis:
-    def __init__(self, arr, pos, num, d):
-        self.arr = arr
-        self.pos = pos
-        self.num = num
-        self.d = d
-        self.redraw_ax(all=True)
-
-    @property
-    def in_range(self):
-        x0 = self.arr[..., *self.pos]
-        return x0 >= self.xmin and x0 <= self.xmax
-
-    def redraw_ax(self, all=False):
-        if all:
-            self.arr_ax = np.repeat(self.arr[np.newaxis], axis=0, repeats=self.num)
-        x0 = self.arr[..., *self.pos]
-        self.xmin = x0 - self.d
-        self.xmax = x0 + self.d
-        self.arr_ax[:, ..., *self.pos] = np.linspace(self.xmin, self.xmax, num=self.num)
-
-
-
-
-
-class ProjectionLayer(LayerWrapper):
-    def __init__(self, layer, W=None, b=None):
-        super().__init__(layer)
-
-        self.redraw_hooks = []
-        self.ax_W = W
-        self.ax_b = b
-
-        if W is None:
-            self.W_ = np.copy(self.layer.W)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.W, dst=self.W_))
-            self.W_getter = lambda: self.W_
-        else:
-            self.redraw_hooks.append(lambda: W.redraw_ax(all=True))
-            self.W_getter = lambda: W.arr_ax
-
-        if b is None:
-            self.b_ = np.copy(self.layer.b)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.b, dst=self.b_))
-            self.b_getter = lambda: self.b_
-        else:
-            self.redraw_hooks.append(lambda: b.redraw_ax(all=True))
-            self.b_getter = lambda: b.arr_ax
+        self.pipeline.feedforward(self.X)
+        self.pipeline.run_model(Y=self.Y)
 
     def redraw_all(self):
-        for fn in self.redraw_hooks:
-            fn()
-
-    @property
-    def W(self):
-        return self.W_getter()
-
-    @property
-    def b(self):
-        return self.b_getter()
-
-
-class ProjectionGrid:
-    def __init__(self, layers, X, Y):
-        self.X = X
-        self.Y = Y
-        self.model = mlogit()
-
-        self.axes = []
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_W) is not None])
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_b) is not None])
-
-        self.layers = layers[:-1]
-        self.layer_out = layers[-1]
-
-        for layer in self.layers:
-            layer.ff = ff()
-            layer.act = relu()
-
-        self.layer_out.ff = ff()
-
-    def compute(self):
-        for ax in self.axes:
-            if not ax.in_range:
-                ax.redraw()
-
-        A = self.X
-        for layer in self.layers:
-            layer.ff.run(A, layer.W, layer.b)
-            layer.act.run(ff.Z)
-            A = layer.act.A
-
-        layer = self.layer_out
-        layer.ff.run(A, layer.W, layer.b)
-        self.model.run(layer.Z, A, self.Y, bprop=False)
+        for proj_layer in self.layers:
+            proj_layer.redraw_all()
 
     @property
     def grid(self):
-      class ProjectionAxis:
-    def __init__(self, arr, pos, num, d):
-        self.arr = arr
-        self.pos = pos
-        self.num = num
-        self.d = d
-        self.redraw_ax(all=True)
-
-    @property
-    def in_range(self):
-        x0 = self.arr[..., *self.pos]
-        return x0 >= self.xmin and x0 <= self.xmax
-
-    def redraw_ax(self, all=False):
-        if all:
-            self.arr_ax = np.repeat(self.arr[np.newaxis], axis=0, repeats=self.num)
-        x0 = self.arr[..., *self.pos]
-        self.xmin = x0 - self.d
-        self.xmax = x0 + self.d
-        self.arr_ax[:, ..., *self.pos] = np.linspace(self.xmin, self.xmax, num=self.num)
-
-
-
-
-
-class ProjectionLayer(LayerWrapper):
-    def __init__(self, layer, W=None, b=None):
-        super().__init__(layer)
-
-        self.redraw_hooks = []
-        self.ax_W = W
-        self.ax_b = b
-
-        if W is None:
-            self.W_ = np.copy(self.layer.W)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.W, dst=self.W_))
-            self.W_getter = lambda: self.W_
-        else:
-            self.redraw_hooks.append(lambda: W.redraw_ax(all=True))
-            self.W_getter = lambda: W.arr_ax
-
-        if b is None:
-            self.b_ = np.copy(self.layer.b)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.b, dst=self.b_))
-            self.b_getter = lambda: self.b_
-        else:
-            self.redraw_hooks.append(lambda: b.redraw_ax(all=True))
-            self.b_getter = lambda: b.arr_ax
-
-    def redraw_all(self):
-        for fn in self.redraw_hooks:
-            fn()
-
-    @property
-    def W(self):
-        return self.W_getter()
-
-    @property
-    def b(self):
-        return self.b_getter()
-
-
-class ProjectionGrid:
-    def __init__(self, layers, X, Y):
-        self.X = X
-        self.Y = Y
-        self.model = mlogit()
-
-        self.axes = []
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_W) is not None])
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_b) is not None])
-
-        self.layers = layers[:-1]
-        self.layer_out = layers[-1]
-
-        for layer in self.layers:
-            layer.ff = ff()
-            layer.act = relu()
-
-        self.layer_out.ff = ff()
-
-    def compute(self):
-        for ax in self.axes:
-            if not ax.in_range:
-                ax.redraw()
-
-        A = self.X
-        for layer in self.layers:
-            layer.ff.run(A, layer.W, layer.b)
-            layer.act.run(ff.Z)
-            A = layer.act.A
-
-        layer = self.layer_out
-        layer.ff.run(A, layer.W, layer.b)
-        self.model.run(layer.Z, A, self.Y, bprop=False)
-
-    @property
-    def grid(self):
-      class ProjectionAxis:
-    def __init__(self, arr, pos, num, d):
-        self.arr = arr
-        self.pos = pos
-        self.num = num
-        self.d = d
-        self.redraw_ax(all=True)
-
-    @property
-    def in_range(self):
-        x0 = self.arr[..., *self.pos]
-        return x0 >= self.xmin and x0 <= self.xmax
-
-    def redraw_ax(self, all=False):
-        if all:
-            self.arr_ax = np.repeat(self.arr[np.newaxis], axis=0, repeats=self.num)
-        x0 = self.arr[..., *self.pos]
-        self.xmin = x0 - self.d
-        self.xmax = x0 + self.d
-        self.arr_ax[:, ..., *self.pos] = np.linspace(self.xmin, self.xmax, num=self.num)
-
-
-
-
-
-class ProjectionLayer(LayerWrapper):
-    def __init__(self, layer, W=None, b=None):
-        super().__init__(layer)
-
-        self.redraw_hooks = []
-        self.ax_W = W
-        self.ax_b = b
-
-        if W is None:
-            self.W_ = np.copy(self.layer.W)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.W, dst=self.W_))
-            self.W_getter = lambda: self.W_
-        else:
-            self.redraw_hooks.append(lambda: W.redraw_ax(all=True))
-            self.W_getter = lambda: W.arr_ax
-
-        if b is None:
-            self.b_ = np.copy(self.layer.b)
-            self.redraw_hooks.append(lambda: np.copyto(src=self.layer.b, dst=self.b_))
-            self.b_getter = lambda: self.b_
-        else:
-            self.redraw_hooks.append(lambda: b.redraw_ax(all=True))
-            self.b_getter = lambda: b.arr_ax
-
-    def redraw_all(self):
-        for fn in self.redraw_hooks:
-            fn()
-
-    @property
-    def W(self):
-        return self.W_getter()
-
-    @property
-    def b(self):
-        return self.b_getter()
-
-
-class ProjectionGrid:
-    def __init__(self, layers, X, Y):
-        self.X = X
-        self.Y = Y
-        self.model = mlogit()
-
-        self.axes = []
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_W) is not None])
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_b) is not None])
-
-        self.layers = layers[:-1]
-        self.layer_out = layers[-1]
-
-        for layer in self.layers:
-            layer.ff = ff()
-            layer.act = relu()
-
-        self.layer_out.ff = ff()
-
-    def compute(self):
-        for ax in self.axes:
-            if not ax.in_range:
-                ax.redraw()
-
-        A = self.X
-        for layer in self.layers:
-            layer.ff.run(A, layer.W, layer.b)
-            layer.act.run(ff.Z)
-            A = layer.act.A
-
-        layer = self.layer_out
-        layer.ff.run(A, layer.W, layer.b)
-        self.model.run(layer.Z, A, self.Y, bprop=False)
-
-    @property
-    def grid(self):
-      return self.model.loss
+        return self.pipeline.model.loss

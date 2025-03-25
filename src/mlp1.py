@@ -1,19 +1,22 @@
 import numpy as np
-from main import init_training_data
-import os.path
-from time import sleep
 from optimize import adam
 
 
 class ff:
     def __init__(self):
         def func(A, W, b):
-            np.matmul(A, W, out=self.Z_)
+            
+            np.dot(A, W, out=self.Z_)
+            
             np.add(self.Z_, b, out=self.Z)
+        
 
         def func_(A, W, b):
-            self.Z_ = np.matmul(A, W)
+        
+            self.Z_ = np.dot(A, W)
+        
             self.Z = np.add(self.Z_, b)
+        
             self.run = func
 
         self.run = func_
@@ -23,22 +26,22 @@ class bprop:
     def __init__(self):
 
         def func(dJdz_p1, W_p1, A_m1, s_deriv):
-            np.einsum("...j,...ij->...i", dJdz_p1, W_p1, out=self.dJdz_)
+            np.einsum("...j,...ij->...i", dJdz_p1, W_p1, out=self.dJdz_, optimize=True)
             np.multiply(s_deriv, self.dJdz_, out=self.dJdz)
             np.multiply(
                 A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW_
             )
-            np.mean(self.dJdW_, axis=-3, out=self.dJdW)
-            np.mean(self.dJdz, axis=-2, out=self.dJdb)
+            np.mean(self.dJdW_, axis=0, out=self.dJdW)
+            np.mean(self.dJdz, axis=0, out=self.dJdb)
 
         def func_(dJdz_p1, W_p1, A_m1, s_deriv):
-            self.dJdz_ = np.einsum("...j,...ij->...i", dJdz_p1, W_p1)
+            self.dJdz_ = np.einsum("...j,...ij->...i", dJdz_p1, W_p1, optimize=True)
             self.dJdz = np.multiply(s_deriv, self.dJdz_)
             self.dJdW_ = np.multiply(
                 A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :]
             )
-            self.dJdW = np.mean(self.dJdW_, axis=-3)
-            self.dJdb = np.mean(self.dJdz, axis=-2)
+            self.dJdW = np.mean(self.dJdW_, axis=0)
+            self.dJdb = np.mean(self.dJdz, axis=0)
 
             self.run = func
 
@@ -75,25 +78,25 @@ class mlogit:
             if Y is not None:
                 np.log(self.Z_exp_sum_, out=self.arr)
                 np.add(self.arr, self.Z_max_, out=self.arr)
-                np.subtract(self.arr, Z[..., self.index_, Y], out=self.arr)
-                np.mean(self.arr, axis=-1, keepdims=True, out=self.loss)
+                np.subtract(self.arr, Z[self.index, ..., Y], out=self.arr)
+                np.mean(self.arr, axis=0, keepdims=True, out=self.loss)
 
                 if accuracy:
                     np.argmax(self.A, axis=-1, out=self.AY)
                     np.equal(self.AY, Y, out=self.AY)
-                    np.mean(self.AY, axis=-1, keepdims=True, out=self.accuracy)
+                    np.mean(self.AY, axis=0, keepdims=True, out=self.accuracy)
 
             if bprop:
                 # compute derivative of per-example loss
                 np.copyto(src=self.A, dst=self.dJdz)
-                self.dJdz[..., self.index_, Y] -= 1
+                self.dJdz[self.index, ..., Y] -= 1
 
                 # compute derivatives wrt. parameters
                 np.multiply(
                     A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :], out=self.dJdW_
                 )
-                np.mean(self.dJdW_, axis=-3, out=self.dJdW)
-                np.mean(self.dJdz, axis=-2, out=self.dJdb)
+                np.mean(self.dJdW_, axis=0, out=self.dJdW)
+                np.mean(self.dJdz, axis=0, out=self.dJdb)
 
         def func_(Z, A_m1, Y=None, bprop=False, accuracy=False):
             # compute activations
@@ -105,29 +108,29 @@ class mlogit:
 
             # compute batch loss
             if Y is not None:
-                self.index_ = np.arange(Y.size)
+                self.index = np.arange(Y.size)
 
                 self.arr = np.log(self.Z_exp_sum_)
                 np.add(self.arr, self.Z_max_, out=self.arr)
-                np.subtract(self.arr, Z[..., self.index_, Y], out=self.arr)
-                self.loss = np.mean(self.arr, axis=-1, keepdims=True)
+                np.subtract(self.arr, Z[self.index, ..., Y], out=self.arr)
+                self.loss = np.mean(self.arr, axis=0, keepdims=True)
 
                 if accuracy:
                     self.AY = np.argmax(self.A, axis=-1)
                     np.equal(self.AY, Y, out=self.AY)
-                    self.accuracy = np.mean(self.AY, axis=-1, keepdims=True)
+                    self.accuracy = np.mean(self.AY, axis=0, keepdims=True)
 
             if bprop:
                 # compute derivative of per-example loss
                 self.dJdz = np.copy(self.A)
-                self.dJdz[..., self.index_, Y] -= 1
+                self.dJdz[self.index, ..., Y] -= 1
 
                 # compute derivatives wrt. parameters
                 self.dJdW_ = np.multiply(
                     A_m1[..., np.newaxis], self.dJdz[..., np.newaxis, :]
                 )
-                self.dJdW = np.mean(self.dJdW_, axis=-3)
-                self.dJdb = np.mean(self.dJdz, axis=-2)
+                self.dJdW = np.mean(self.dJdW_, axis=0)
+                self.dJdb = np.mean(self.dJdz, axis=0)
 
             self.run = func
 
@@ -136,6 +139,7 @@ class mlogit:
 
 class Layer:
     def __init__(self, i, j):
+        self.width = j
         self.W = np.random.rand(i, j)
         self.b = np.random.rand(j)
 
@@ -146,7 +150,10 @@ class Layer:
 
 class LayerWrapper:
     def __init__(self, layer):
-        self.layer = layer
+        if layer is not None:
+            self.layer = layer
+            self.W = self.layer.W
+            self.b = self.layer.b
 
 
 class pipeline:
@@ -173,10 +180,10 @@ class pipeline:
     def feedforward(self, X):
         self.layer_in.act.A = X
         for lw in self.layers:
-            lw.ff.run(lw.previous.act.A, lw.layer.W, lw.layer.b)
+            lw.ff.run(lw.previous.act.A, lw.W, lw.b)
             lw.act.run(lw.ff.Z)
         lw = self.layer_out
-        lw.ff.run(lw.previous.act.A, lw.layer.W, lw.layer.b)
+        lw.ff.run(lw.previous.act.A, lw.W, lw.b)
 
     def run_model(self, **kwargs):
         lw = self.layer_out
@@ -188,7 +195,7 @@ class pipeline:
         for lw in self.layers[::-1]:
             lw.bprop.run(
                 dJdz_p1=dJdz_p1,
-                W_p1=lw.next.layer.W,
+                W_p1=lw.next.W,
                 A_m1=lw.previous.act.A,
                 s_deriv=lw.act.deriv,
             )
@@ -235,8 +242,7 @@ class Training:
         self.training_pipeline.feedforward(X)
         model = self.training_pipeline.run_model(Y=Y, bprop=True, accuracy=True)
         self.training_pipeline.bprop()
-        print(model.loss[0], '\t\t', model.accuracy[0], end='\r')
-        
+        print(model.loss[0], "\t\t", model.accuracy[0], end="\r")
 
         self.optimizer.run(self.training_pipeline.dJdW, self.training_pipeline.dJdb)
 
@@ -247,26 +253,3 @@ class Training:
         for T, DT in ((self.W, self.optimizer.dW), (self.b, self.optimizer.db)):
             for t, dt in zip(T, DT):
                 np.add(t, dt, out=t)
-
-
-def main():
-    dims = [28 * 28, 16, 16, 10]
-    path = "params/small_50epochs_93percent"
-    layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-    
-    (N, it, valset) = init_training_data(
-        "data/train.csv", batchsize=20, valsetsize=100, epochs=10
-    )
-    training = Training(layers, it, valset, alpha=0.02)
-    
-    while not training.completed:
-        training.train_minibatch()
-        sleep(0.1)
-
-    # print("djdw")
-    # for djdw in training.training_pipeline.dJdW:
-    #     print(djdw)
-    # print("output")
-    # print(training.training_pipeline.model.A)
-
-main()
