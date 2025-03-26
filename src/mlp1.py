@@ -5,18 +5,12 @@ from optimize import adam
 class ff:
     def __init__(self):
         def func(A, W, b):
-            
             np.dot(A, W, out=self.Z_)
-            
             np.add(self.Z_, b, out=self.Z)
-        
 
         def func_(A, W, b):
-        
             self.Z_ = np.dot(A, W)
-        
             self.Z = np.add(self.Z_, b)
-        
             self.run = func
 
         self.run = func_
@@ -242,13 +236,13 @@ class Training:
         self.training_pipeline.feedforward(X)
         model = self.training_pipeline.run_model(Y=Y, bprop=True, accuracy=True)
         self.training_pipeline.bprop()
-        print(model.loss[0], "\t\t", model.accuracy[0], end="\r")
 
         self.optimizer.run(self.training_pipeline.dJdW, self.training_pipeline.dJdb)
 
         X, Y = self.valset
         self.validation_pipeline.feedforward(X)
         model = self.validation_pipeline.run_model(Y=Y, bprop=False, accuracy=True)
+        print(model.loss[0], "\t\t", model.accuracy[0], end="\r")
 
         for T, DT in ((self.W, self.optimizer.dW), (self.b, self.optimizer.db)):
             for t, dt in zip(T, DT):
