@@ -15,7 +15,7 @@ def main():
     dims = [28 * 28, 16, 16, 10]
     path = "params/small_50epochs_93percent"
     layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-    if 1:
+    if 0:
         for i, layer in enumerate(layers, start=1):
             layer.load_params(
                 wpath=os.path.join(path, f"W{i}.npy"),
@@ -26,34 +26,27 @@ def main():
         "data/train.csv", batchsize=20, valsetsize=20, epochs=10
     )
 
+    fig, ax = plt.subplots(subplot_kw=dict(projection="3d"))
+    
     X, Y = valset
 
     proj_layers = [ProjectionLayer(layer) for layer in layers]
 
     proj_layer = proj_layers[-1]
     proj_layer.add_axes(
-        W=(
-            ProjectionAxis(arr=proj_layer.layer.W, pos=(0, 7), num=100, d=20),
-            ProjectionAxis(arr=proj_layer.layer.W, pos=(0, 8), num=100, d=20),
+        b=(
+            ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),
+            ProjectionAxis(arr=proj_layer.layer.b, pos=(1,), num=100),
         ),
     )
 
-    proj_grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
-    fig, ax = plt.subplots(subplot_kw=dict(projection="3d"))
-
-    [ax1, ax2] = proj_grid.axes
-
-    view = ProjectionView(ax, ax1=ax1, ax2=ax2, grid=proj_grid.grid)
+    view = ProjectionView(ax, proj_layers, X=X, Y=Y, update_interval=50)
 
     training = Training(layers, it, valset, alpha=0.03)
 
     def update(_):
         training.train_minibatch()
-        redraw = proj_grid.iter()
-        if redraw:
-            proj_grid.redraw()
-            view.redraw(ax1=ax1, ax2=ax2, grid=proj_grid.grid)
-        view.draw_point(ax1.x0, ax2.x0)
+        view.draw_frame()
         # input()
 
     ani = FuncAnimation(fig, func=update, cache_frame_data=False, interval=20)

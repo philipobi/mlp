@@ -1,38 +1,47 @@
 import numpy as np
 from mlp1 import LayerWrapper, pipeline
 from scipy.interpolate import RegularGridInterpolator
+from collections import deque
+
+def expand_range(x, xmin, xmax, padding=0):
+    if x < xmin:
+        return (x - padding, xmax)
+    elif x > xmax:
+        return (xmin, x + padding)
+    return (xmin, xmax)
 
 
 class ProjectionAxis:
-    def __init__(self, arr, pos, num, d=None):
+    def __init__(self, arr, pos, num):
         self.arr = arr
         self.pos = pos
         self.num = num
         self.arr_getter = lambda: None
         self.x0 = None
-        self.d = d
+        self.xmin = None
+        self.xmax = None
         self.update_x0()
 
     def update_x0(self):
         self.x0_prev = self.x0
         self.x0 = self.arr[*self.pos]
 
+    def in_range(self, x):
+        return self.xmin <= x and x <= self.xmax
+
     @property
-    def in_range(self):
-        return self.x0 >= self.xmin and self.x0 <= self.xmax
+    def lim(self):
+        return (self.xmin, self.xmax)
+
+    @lim.setter
+    def lim(self, limits):
+        (self.xmin, self.xmax) = limits
 
     def redraw(self):
         self.arr_ax = np.repeat(self.arr_getter()[np.newaxis], axis=0, repeats=self.num)
-        d = (
-            abs(self.x0)
-            if self.x0_prev is None
-            else abs(self.num * self.x0 - self.num * self.x0_prev)
-        )
-        d = self.d or d or 1
-        self.xmin = self.x0 - d
-        self.xmax = self.x0 + d
         self.axis = np.linspace(self.xmin, self.xmax, num=self.num)
-        self.arr_ax[..., *self.pos].reshape(-1, copy=False)[:] = self.axis
+        arr = np.moveaxis(self.arr_ax, source=0, destination=-1)
+        arr[..., *self.pos, :] = self.axis
 
 
 class ProjectionLayer(LayerWrapper):
@@ -70,11 +79,8 @@ class ProjectionLayer(LayerWrapper):
 
             W_getter = self.W_getter
             self.W_getter = lambda: np.expand_dims(
-                W_getter(), axis=(1 if W else (i for i, _ in enumerate(b)))
+                W_getter(), axis=(1 if W else tuple(range(len(b))))
             )
-
-        for ax in self.axes:
-            ax.redraw()
 
     def redraw(self):
         for fn in [*self.W_redraw, *self.b_redraw]:
@@ -98,43 +104,28 @@ class ProjectionLayer(LayerWrapper):
 
 
 class ProjectionGrid:
-    def __init__(self, layers, X, Y, update_interval=10):
-        self.update_interval = update_interval
-        self.i = 0
+    def __init__(self, layers, X, Y):
         self.X = X
         self.Y = Y
 
         self.axes = [ax for layer in layers for ax in layer.axes]
 
+        self.layers = list(layers)
         self.pipeline = pipeline(layers)
-        self.layers = layers
-
-        self.compute()
 
     def compute(self):
         self.pipeline.feedforward(self.X)
         self.pipeline.run_model(Y=self.Y)
 
     def redraw(self):
-        self.i = 0
+        """
+        Refresh W, b arrays for all layers to mirror current W and b having undergone optimization
+
+        For projection layers with axes, compute W and b with new values and axis ranges
+        """
         for proj_layer in self.layers:
             proj_layer.redraw()
         self.compute()
-
-    def iter(self):
-        self.i += 1
-
-        redraw = False
-
-        for ax in self.axes:
-            ax.update_x0()
-            if not ax.in_range:
-                redraw = True
-
-        if self.i == self.update_interval:
-            redraw = True
-
-        return redraw
 
     @property
     def grid(self):
@@ -142,22 +133,58 @@ class ProjectionGrid:
 
 
 class ProjectionView:
-    def __init__(self, ax, ax1, ax2, grid):
+    def __init__(self, ax, proj_layers, X, Y, update_interval=10):
+        self.update_interval = update_interval
+        self.i = 0
+        self.max_values = deque(maxlen=5)
+        self.min_values = deque(maxlen=5)
+
         self.ax = ax
+        self.ax.set_zlim(0)
+        self.ax.set_xlabel("ax 1")
+        self.ax.set_ylabel("ax 2")
+        self.ax.set_zlabel("loss")
+
+        self.grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
+        [self.ax1, self.ax2] = self.grid.axes
+        self.domain = ProjectionDomain(self.ax1, self.ax2)
+
         self.surface = None
         self.scatter = None
-        self.redraw(ax1, ax2, grid)
 
-    def interpolate(self, x, y):
-        [z] = self.interp([x, y])
-        return (x, y, z)
+        self.redraw()
 
-    def draw_point(self, x, y):
+    def draw_frame(self):
+        self.i += 1
+        redraw = self.i >= self.update_interval
+
+        self.ax1.update_x0()
+        self.ax2.update_x0()
+        x1, x2 = (self.ax1.x0, self.ax2.x0)
+
+        if not self.domain.in_domain(x1, x2):
+            redraw = True
+            self.domain.update(x1, x2)
+
+        if redraw:
+            self.redraw()
+
+        self.draw_point(x1, x2)
+
+    def interpolate(self, x1, x2):
+        [x3] = self.interp([x1, x2])
+        return (x1, x2, x3)
+
+    def draw_point(self, x1, x2):
         if self.scatter:
             self.scatter.remove()
-        self.scatter = self.ax.scatter(*self.interpolate(x, y), color="red")
+        self.scatter = self.ax.scatter(*self.interpolate(x1, x2), color="red")
 
-    def redraw(self, ax1, ax2, grid):
+    def redraw(self):
+        self.i = 0
+        ax1, ax2 = (self.ax1, self.ax2)
+        self.grid.redraw()
+        grid = self.grid.grid
         self.interp = RegularGridInterpolator(points=(ax1.axis, ax2.axis), values=grid)
         if self.surface:
             self.surface.remove()
@@ -165,7 +192,31 @@ class ProjectionView:
         self.surface = self.ax.plot_surface(
             X, Y, Z=grid, alpha=0.3, edgecolor="royalblue", color="gray"
         )
-        self.ax.set_xlim(ax1.xmin, ax1.xmax)
-        self.ax.set_ylim(ax2.xmin, ax2.xmax)
-        zmin, zmax = (np.min(grid), np.max(grid))
-        self.ax.set_zlim(zmin, zmax)
+        
+        self.ax.set_xlim(*ax1.lim)
+        self.ax.set_ylim(*ax2.lim)
+        self.min_values.append(np.min(grid))
+        self.max_values.append(np.max(grid))
+        self.ax.set_zlim(max(0, min(self.min_values)-0.5), max(self.max_values))
+
+class ProjectionDomain:
+    def __init__(self, ax1, ax2, d1=None, d2=None):
+        self.ax1 = ax1
+        self.ax2 = ax2
+
+        x1 = self.ax1.x0
+        d1 = d1 or abs(x1) or 1
+        self.ax1.lim = (x1 - d1, x1 + d1)
+
+        x2 = self.ax2.x0
+        d2 = d2 or abs(x2) or 1
+        self.ax2.lim = (x2 - d2, x2 + d2)
+
+    def in_domain(self, x1, x2):
+        return self.ax1.in_range(x1) and self.ax2.in_range(x2)
+
+    def update(self, x1, x2):
+        for ax, x in ((self.ax1, x1), (self.ax2, x2)):
+            if not ax.in_range(x):
+                pad = abs(ax.x0 - ax.x0_prev)
+                ax.lim = expand_range(x, *ax.lim, pad)
