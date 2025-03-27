@@ -8,10 +8,10 @@ class ProjectionAxis:
         self.arr = arr
         self.pos = pos
         self.num = num
+        self.arr_getter = lambda: None
         self.x0 = None
         self.d = d
         self.update_x0()
-        self.redraw_ax()
 
     def update_x0(self):
         self.x0_prev = self.x0
@@ -21,8 +21,8 @@ class ProjectionAxis:
     def in_range(self):
         return self.x0 >= self.xmin and self.x0 <= self.xmax
 
-    def redraw_ax(self):
-        self.arr_ax = np.repeat(self.arr[np.newaxis], axis=0, repeats=self.num)
+    def redraw(self):
+        self.arr_ax = np.repeat(self.arr_getter()[np.newaxis], axis=0, repeats=self.num)
         d = (
             abs(self.x0)
             if self.x0_prev is None
@@ -38,34 +38,47 @@ class ProjectionAxis:
 class ProjectionLayer(LayerWrapper):
     def __init__(self, layer):
         super().__init__(layer)
-        self.ax_W = None
-        self.ax_b = None
-
+        self.axes = []
         self.W_ = np.copy(self.layer.W)
         self.W_getter = lambda: self.W_
-        self.W_redraw = lambda: np.copyto(src=self.layer.W, dst=self.W_)
+        self.W_redraw = [lambda: np.copyto(src=self.layer.W, dst=self.W_)]
 
         self.b_ = np.copy(self.layer.b)
         self.b_getter = lambda: self.b_
-        self.b_redraw = lambda: np.copyto(src=self.layer.b, dst=self.b_)
+        self.b_redraw = [lambda: np.copyto(src=self.layer.b, dst=self.b_)]
 
     def add_axes(self, W=None, b=None):
-        self.ax_W = W
-        self.ax_b = b
-
         if W:
-            self.W_redraw = lambda: W.redraw_ax()
-            self.W_getter = lambda: W.arr_ax
+            self.W_redraw = []
+            getter = lambda: self.layer.W
+            for axis in reversed(W):
+                self.axes.append(axis)
+                axis.arr_getter = getter
+                self.W_redraw.append(lambda ax=axis: ax.redraw())
+                getter = lambda ax=axis: ax.arr_ax
+            self.W_getter = lambda ax=axis: ax.arr_ax
 
         if b:
-            self.b_redraw = lambda: b.redraw_ax()
-            self.b_getter = lambda: b.arr_ax
+            self.b_redraw = []
+            getter = lambda: self.layer.b
+            for axis in reversed(b):
+                self.axes.append(axis)
+                axis.arr_getter = getter
+                self.b_redraw.append(lambda ax=axis: ax.redraw())
+                getter = lambda ax=axis: ax.arr_ax
+            self.b_getter = lambda ax=axis: ax.arr_ax
+
             W_getter = self.W_getter
-            self.W_getter = lambda: np.expand_dims(W_getter(), axis=(1 if W else 0))
+            self.W_getter = lambda: np.expand_dims(
+                W_getter(), axis=(1 if W else (i for i, _ in enumerate(b)))
+            )
+
+        for ax in self.axes:
+            ax.redraw()
 
     def redraw(self):
-        self.W_redraw()
-        self.b_redraw()
+        for fn in [*self.W_redraw, *self.b_redraw]:
+            fn()
 
     @property
     def W(self):
@@ -91,10 +104,7 @@ class ProjectionGrid:
         self.X = X
         self.Y = Y
 
-        self.axes = []
-
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_W) is not None])
-        self.axes.extend([ax for layer in layers if (ax := layer.ax_b) is not None])
+        self.axes = [ax for layer in layers for ax in layer.axes]
 
         self.pipeline = pipeline(layers)
         self.layers = layers

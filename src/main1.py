@@ -29,16 +29,19 @@ def main():
     X, Y = valset
 
     proj_layers = [ProjectionLayer(layer) for layer in layers]
-    
+
     proj_layer = proj_layers[-1]
     proj_layer.add_axes(
-        W=(ax1 := ProjectionAxis(arr=proj_layer.layer.W, pos=(0, 7), num=100, d=20)),
-        b=(ax2 := ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100, d=20)),
+        W=(
+            ProjectionAxis(arr=proj_layer.layer.W, pos=(0, 7), num=100, d=20),
+            ProjectionAxis(arr=proj_layer.layer.W, pos=(0, 8), num=100, d=20),
+        ),
     )
 
     proj_grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
-
     fig, ax = plt.subplots(subplot_kw=dict(projection="3d"))
+
+    [ax1, ax2] = proj_grid.axes
 
     view = ProjectionView(ax, ax1=ax1, ax2=ax2, grid=proj_grid.grid)
 
@@ -51,7 +54,7 @@ def main():
             proj_grid.redraw()
             view.redraw(ax1=ax1, ax2=ax2, grid=proj_grid.grid)
         view.draw_point(ax1.x0, ax2.x0)
-        #input()
+        # input()
 
     ani = FuncAnimation(fig, func=update, cache_frame_data=False, interval=20)
 
