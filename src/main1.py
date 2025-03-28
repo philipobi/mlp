@@ -2,13 +2,10 @@ import numpy as np
 from main import init_training_data
 import os.path
 from time import sleep
-from optimize import adam
-from projection import ProjectionAxis, ProjectionLayer, ProjectionGrid, ProjectionView
+from projection import ProjectionAxis, ProjectionLayer, ProjectionView
 from mlp1 import Layer, Training, pipeline, LayerWrapper
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
-from matplotlib import cm
-from scipy.interpolate import RegularGridInterpolator
 
 
 def main():
@@ -36,7 +33,9 @@ def main():
     proj_layer.add_axes(
         b=(
             ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),
-            ProjectionAxis(arr=proj_layer.layer.b, pos=(1,), num=100),
+        ),
+        W=(
+            ProjectionAxis(arr=proj_layer.layer.W, pos=(7,0), num=100),
         ),
     )
 
@@ -49,7 +48,7 @@ def main():
         view.draw_frame()
         # input()
 
-    ani = FuncAnimation(fig, func=update, cache_frame_data=False, interval=20)
+    ani = FuncAnimation(fig, func=update, cache_frame_data=False, interval=0)
 
     plt.show()
 

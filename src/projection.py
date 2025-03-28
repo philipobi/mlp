@@ -11,13 +11,12 @@ def linspace(start, stop, num, out):
 
 
 class DescentPath:
-    def __init__(self, ax, init_domain, n_samples=1000):
+    def __init__(self, ax, n_samples=1000):
         self.n = n_samples
         self.arr0 = np.empty((2 * self.n, 3))
         self.arr1 = np.empty_like(self.arr0)
         self.i = 0
-        self.path = ax.plot(xs=[], ys=[], zs=[], color="red")[0]
-        ((self.x_min, self.x_max), (self.y_min, self.y_max)) = init_domain
+        self.path = ax.plot(xs=[], ys=[], zs=[], color="red", lw=2)[0]
 
     def reduce(self):
         self.arr1[: self.n] = self.arr0[::2]
@@ -31,24 +30,9 @@ class DescentPath:
         if self.i < 2 * self.n:
             self.arr0[self.i] = [x, y, z]
             self.i += 1
-
-            self.x_min = min(self.x_min, x)
-            self.x_max = max(self.x_max, x)
-            self.y_min = min(self.y_min, y)
-            self.y_max = max(self.y_max, y)
-
         else:
             self.reduce()
-            self.arr0[self.i] = [x, y, z]
-            self.i += 1
-
-            arr = self.arr
-            arr_x = arr[0]
-            arr_y = arr[1]
-            self.x_min = np.min(arr_x)
-            self.x_max = np.max(arr_x)
-            self.y_min = np.min(arr_y)
-            self.y_max = np.max(arr_y)
+            self.append(x, y, z)
 
     def update(self, x, y, z):
         self.append(x, y, z)
@@ -57,15 +41,6 @@ class DescentPath:
     @property
     def arr(self):
         return self.arr0[: self.i].T
-
-    @property
-    def domain(self):
-        return ((self.x_min, self.x_max), (self.y_min, self.y_max))
-
-    def in_domain(self, x, y):
-        return (self.x_min <= x and x <= self.x_max) and (
-            self.y_min <= y and y <= self.y_max
-        )
 
 
 class ProjectionAxis:
@@ -92,9 +67,6 @@ class ProjectionAxis:
     def update_x0(self):
         self.x0_prev = self.x0
         self.x0 = self.arr[*self.pos]
-
-    def in_range(self, x, pad=0):
-        return self.xmin + pad <= x and x <= self.xmax - pad
 
     @property
     def lim(self):
@@ -183,9 +155,19 @@ class ProjectionGrid:
         self.layers = list(layers)
         self.pipeline = pipeline(layers)
 
+        def func():
+            np.square(self.grid, out=self.grid_scaled)
+
+        def func_():
+            self.grid_scaled = np.square(self.grid)
+            self.compute_log = func
+
+        self.compute_scaled = func_
+
     def compute(self):
         self.pipeline.feedforward(self.X)
         self.pipeline.run_model(Y=self.Y)
+        self.compute_scaled()
 
     def redraw(self):
         """
@@ -219,9 +201,8 @@ class ProjectionView:
         [self.ax1, self.ax2] = self.grid.axes
         self.domain = ProjectionDomain(self.ax1, self.ax2)
 
-        self.descent_path = DescentPath(self.ax)
+        self.descent_path = DescentPath(self.ax, n_samples=500)
         self.surface = None
-        self.scatter = None
 
         self.redraw()
 
@@ -241,30 +222,23 @@ class ProjectionView:
         [x3] = self.interp([x1, x2])
         return (x1, x2, x3)
 
-    def draw_point(self, x1, x2):
-        if self.scatter:
-            self.scatter.remove()
-        self.scatter = self.ax.scatter(*self.interpolate(x1, x2), color="red")
-
     def redraw(self):
         self.i = 0
         ax1, ax2 = (self.ax1, self.ax2)
         self.grid.redraw()
-        grid = self.grid.grid
+        grid = self.grid.grid_scaled
         self.interp = RegularGridInterpolator(points=(ax1.axis, ax2.axis), values=grid)
         self.descent_path.redraw(self.interp)
         if self.surface:
             self.surface.remove()
         X, Y = np.meshgrid(ax1.axis, ax2.axis, copy=False, indexing="ij")
-        self.surface = self.ax.plot_surface(
-            X, Y, Z=grid, alpha=0.3, edgecolor="royalblue", color="gray"
-        )
+        self.surface = self.ax.plot_surface(X, Y, Z=grid, cmap="coolwarm", alpha=0.5, axlim_clip=True)
 
         self.ax.set_xlim(*ax1.lim)
         self.ax.set_ylim(*ax2.lim)
         self.min_values.append(np.min(grid))
         self.max_values.append(np.max(grid))
-        self.ax.set_zlim(max(0, min(self.min_values) - 0.5), max(self.max_values))
+        self.ax.set_zlim(max(0, min(500, min(self.min_values) - 0.5)), min(1000, max(self.max_values)))
 
 
 class ProjectionDomain:
@@ -274,19 +248,21 @@ class ProjectionDomain:
 
         for ax in (self.ax1, self.ax2):
             x = ax.x0
-            d = d or abs(x) or 1
-            self.ax.lim = (x-d, x+d)
+            d = d or abs(x) / 8 or 1
+            ax.lim = (x - d, x + d)
 
     def update(self, x1, x2):
         redraw = False
         for ax, x in ((self.ax1, x1), (self.ax2, x2)):
             xmin, xmax = ax.lim
             d = xmax - xmin
-            if xmax - x < d/4:
-                xmax = x + d/2
+            margin = d / 16
+            pad = d / 8
+            if xmax - x < margin:
+                xmax = x + pad
                 redraw = True
-            if x - xmin < d/4:
-                xmin = x - d/2
+            if x - xmin < margin:
+                xmin = x - pad
                 redraw = True
             ax.lim = (xmin, xmax)
         return redraw
