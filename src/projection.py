@@ -3,12 +3,69 @@ from mlp1 import LayerWrapper, pipeline
 from scipy.interpolate import RegularGridInterpolator
 from collections import deque
 
-def expand_range(x, xmin, xmax, padding=0):
-    if x < xmin:
-        return (x - padding, xmax)
-    elif x > xmax:
-        return (xmin, x + padding)
-    return (xmin, xmax)
+
+def linspace(start, stop, num, out):
+    d = (stop - start) / num
+    for i in range(num):
+        out[i] = start + i * d
+
+
+class DescentPath:
+    def __init__(self, ax, init_domain, n_samples=1000):
+        self.n = n_samples
+        self.arr0 = np.empty((2 * self.n, 3))
+        self.arr1 = np.empty_like(self.arr0)
+        self.i = 0
+        self.path = ax.plot(xs=[], ys=[], zs=[], color="red")[0]
+        ((self.x_min, self.x_max), (self.y_min, self.y_max)) = init_domain
+
+    def reduce(self):
+        self.arr1[: self.n] = self.arr0[::2]
+        (self.arr0, self.arr1) = (self.arr1, self.arr0)
+        self.i = self.n
+
+    def redraw(self, interp):
+        self.arr[2][:] = interp(self.arr0[: self.i, :2])
+
+    def append(self, x, y, z):
+        if self.i < 2 * self.n:
+            self.arr0[self.i] = [x, y, z]
+            self.i += 1
+
+            self.x_min = min(self.x_min, x)
+            self.x_max = max(self.x_max, x)
+            self.y_min = min(self.y_min, y)
+            self.y_max = max(self.y_max, y)
+
+        else:
+            self.reduce()
+            self.arr0[self.i] = [x, y, z]
+            self.i += 1
+
+            arr = self.arr
+            arr_x = arr[0]
+            arr_y = arr[1]
+            self.x_min = np.min(arr_x)
+            self.x_max = np.max(arr_x)
+            self.y_min = np.min(arr_y)
+            self.y_max = np.max(arr_y)
+
+    def update(self, x, y, z):
+        self.append(x, y, z)
+        self.path.set_data_3d(self.arr)
+
+    @property
+    def arr(self):
+        return self.arr0[: self.i].T
+
+    @property
+    def domain(self):
+        return ((self.x_min, self.x_max), (self.y_min, self.y_max))
+
+    def in_domain(self, x, y):
+        return (self.x_min <= x and x <= self.x_max) and (
+            self.y_min <= y and y <= self.y_max
+        )
 
 
 class ProjectionAxis:
@@ -20,14 +77,24 @@ class ProjectionAxis:
         self.x0 = None
         self.xmin = None
         self.xmax = None
+        self.axis = np.empty(self.num)
         self.update_x0()
+
+        def func(arr):
+            np.copyto(src=arr, dst=self.arr_ax)
+
+        def func_(arr):
+            self.arr_ax = np.copy(arr)
+            self.copy_arr_ax = func
+
+        self.copy_arr_ax = func_
 
     def update_x0(self):
         self.x0_prev = self.x0
         self.x0 = self.arr[*self.pos]
 
-    def in_range(self, x):
-        return self.xmin <= x and x <= self.xmax
+    def in_range(self, x, pad=0):
+        return self.xmin + pad <= x and x <= self.xmax - pad
 
     @property
     def lim(self):
@@ -38,8 +105,11 @@ class ProjectionAxis:
         (self.xmin, self.xmax) = limits
 
     def redraw(self):
-        self.arr_ax = np.repeat(self.arr_getter()[np.newaxis], axis=0, repeats=self.num)
-        self.axis = np.linspace(self.xmin, self.xmax, num=self.num)
+        arr = self.arr_getter()
+        arr = np.broadcast_to(arr, shape=(self.num, *arr.shape))
+        self.copy_arr_ax(arr)
+
+        linspace(self.xmin, self.xmax, num=self.num, out=self.axis)
         arr = np.moveaxis(self.arr_ax, source=0, destination=-1)
         arr[..., *self.pos, :] = self.axis
 
@@ -149,6 +219,7 @@ class ProjectionView:
         [self.ax1, self.ax2] = self.grid.axes
         self.domain = ProjectionDomain(self.ax1, self.ax2)
 
+        self.descent_path = DescentPath(self.ax)
         self.surface = None
         self.scatter = None
 
@@ -156,20 +227,15 @@ class ProjectionView:
 
     def draw_frame(self):
         self.i += 1
-        redraw = self.i >= self.update_interval
 
         self.ax1.update_x0()
         self.ax2.update_x0()
-        x1, x2 = (self.ax1.x0, self.ax2.x0)
+        x, y = (self.ax1.x0, self.ax2.x0)
 
-        if not self.domain.in_domain(x1, x2):
-            redraw = True
-            self.domain.update(x1, x2)
-
-        if redraw:
+        if self.domain.update(x, y) or self.i >= self.update_interval:
             self.redraw()
 
-        self.draw_point(x1, x2)
+        self.descent_path.update(*self.interpolate(x, y))
 
     def interpolate(self, x1, x2):
         [x3] = self.interp([x1, x2])
@@ -186,37 +252,41 @@ class ProjectionView:
         self.grid.redraw()
         grid = self.grid.grid
         self.interp = RegularGridInterpolator(points=(ax1.axis, ax2.axis), values=grid)
+        self.descent_path.redraw(self.interp)
         if self.surface:
             self.surface.remove()
         X, Y = np.meshgrid(ax1.axis, ax2.axis, copy=False, indexing="ij")
         self.surface = self.ax.plot_surface(
             X, Y, Z=grid, alpha=0.3, edgecolor="royalblue", color="gray"
         )
-        
+
         self.ax.set_xlim(*ax1.lim)
         self.ax.set_ylim(*ax2.lim)
         self.min_values.append(np.min(grid))
         self.max_values.append(np.max(grid))
-        self.ax.set_zlim(max(0, min(self.min_values)-0.5), max(self.max_values))
+        self.ax.set_zlim(max(0, min(self.min_values) - 0.5), max(self.max_values))
+
 
 class ProjectionDomain:
-    def __init__(self, ax1, ax2, d1=None, d2=None):
+    def __init__(self, ax1, ax2, d=None):
         self.ax1 = ax1
         self.ax2 = ax2
 
-        x1 = self.ax1.x0
-        d1 = d1 or abs(x1) or 1
-        self.ax1.lim = (x1 - d1, x1 + d1)
-
-        x2 = self.ax2.x0
-        d2 = d2 or abs(x2) or 1
-        self.ax2.lim = (x2 - d2, x2 + d2)
-
-    def in_domain(self, x1, x2):
-        return self.ax1.in_range(x1) and self.ax2.in_range(x2)
+        for ax in (self.ax1, self.ax2):
+            x = ax.x0
+            d = d or abs(x) or 1
+            self.ax.lim = (x-d, x+d)
 
     def update(self, x1, x2):
+        redraw = False
         for ax, x in ((self.ax1, x1), (self.ax2, x2)):
-            if not ax.in_range(x):
-                pad = abs(ax.x0 - ax.x0_prev)
-                ax.lim = expand_range(x, *ax.lim, pad)
+            xmin, xmax = ax.lim
+            d = xmax - xmin
+            if xmax - x < d/4:
+                xmax = x + d/2
+                redraw = True
+            if x - xmin < d/4:
+                xmin = x - d/2
+                redraw = True
+            ax.lim = (xmin, xmax)
+        return redraw
