@@ -11,9 +11,7 @@ from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
 import matplotlib as mpl
 import numpy as np
-from itertools import cycle, chain
-import time
-from threading import Barrier
+from itertools import cycle
 
 PatchCollection.update_objects = lambda self: self.set_paths(self.objects)
 
@@ -390,7 +388,7 @@ class LayerVisualization:
 class MLPVisualization:
     maxwidth = 10
 
-    def __init__(self, mlp_interface, dx, dy, r):
+    def __init__(self, layers_interfaces, dx, dy, r):
 
         # create mpl objects
         self.fig = plt.figure()
@@ -398,10 +396,10 @@ class MLPVisualization:
         # fmt: off
         axs = self.fig.subplot_mosaic(
             [
-                ["empty", "btn_cmap" ,"box_dxdy", "btn_start"],
-                ["img", "graph", "graph", "graph"],   
-                ["img", "graph", "graph", "graph"],   
-                ["empty", "cbar", "cbar", "cbar"]
+                ["loss_plot", "btn_cmap" ,"box_dxdy", "btn_start"],
+                ["loss_plot", "graph", "graph", "graph"],   
+                ["accuracy_plot", "graph", "graph", "graph"],   
+                ["accuracy_plot", "cbar", "cbar", "cbar"]
             ], 
             width_ratios=[1, 0.4, 0.4, 0.4],
             height_ratios=[
@@ -424,7 +422,7 @@ class MLPVisualization:
         Context.dy = dy
 
         self.layers = [
-            LayerVisualization(layer, i) for i, layer in enumerate(mlp_interface.layers)
+            LayerVisualization(layer, i) for i, layer in enumerate(layers_interfaces)
         ]
 
         Node.radius = r
@@ -527,12 +525,12 @@ class MLPVisualization:
         self.box_dxdy.set_val(f"{Context.dx}, {Context.dy}")
         self.btn_start = Button(ax=axs["btn_start"], label="Start")
 
-        self.img = axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
+        self.img = None #axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
 
         # make loss plots
         self.loss_plot = None
         self.accuracy_plot = None
-        if 0:
+        if 1:
             self.loss_plot = axs["loss_plot"]
             self.train_loss_plot = self.loss_plot.plot(
                 [], [], label="Training Loss", color="blue"
@@ -562,6 +560,7 @@ class MLPVisualization:
             mpl.colormaps["viridis"],
             #LinearSegmentedColormap.from_list("cmap", list(zip(nodes, colors))),
             mpl.colormaps["Pastel1"],
+            mpl.colormaps["tab20c"],
         )
 
         cmap.norm = SymLogNorm(linthresh=0.03)

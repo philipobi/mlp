@@ -12,7 +12,7 @@ def main():
     dims = [28 * 28, 16, 16, 10]
     path = "params/small_50epochs_93percent"
     layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-    if 0:
+    if 1:
         for i, layer in enumerate(layers, start=1):
             layer.load_params(
                 wpath=os.path.join(path, f"W{i}.npy"),
@@ -24,22 +24,18 @@ def main():
     )
 
     fig, ax = plt.subplots(subplot_kw=dict(projection="3d"))
-    
+
     X, Y = valset
 
     proj_layers = [ProjectionLayer(layer) for layer in layers]
 
     proj_layer = proj_layers[-1]
     proj_layer.add_axes(
-        b=(
-            ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),
-        ),
-        W=(
-            ProjectionAxis(arr=proj_layer.layer.W, pos=(7,0), num=100),
-        ),
+        b=(ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),),
+        W=(ProjectionAxis(arr=proj_layer.layer.W, pos=(7, 0), num=100),),
     )
 
-    view = ProjectionView(ax, proj_layers, X=X, Y=Y, update_interval=10)
+    view = ProjectionView(ax, proj_layers, X=X, Y=Y, update_interval=100)
 
     training = Training(layers, it, valset, alpha=0.03)
 

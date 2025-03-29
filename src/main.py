@@ -1,14 +1,11 @@
 import numpy as np
-from mlp import MLP, Layer, InputLayer, OutputLayer, MLogit
-from utils import Adam
-from visualization import MLPVisualization, Node
+from mlp import Layer, Training
+from visualization import MLPVisualization
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
-from itertools import count
 from math import ceil
 from utils import epoch_it
-from itertools import cycle
-
+from itertools import count, cycle
 
 def init_training_data(path, batchsize, valsetsize, epochs):
 
@@ -25,35 +22,28 @@ def init_training_data(path, batchsize, valsetsize, epochs):
 
     return (N, it, valset)
 
-
-class MLPInterface:
-    def __init__(self, mlp):
-        self.layers = [LayerInterface(layer) for layer in mlp.layers]
-
-
 class LayerInterface:
-    def __init__(self, layer):
-        self._layer = layer
-        self.width = self._layer.width
+    def __init__(self, layer_wrapped, width=None):
+        self.lw = layer_wrapped
+        self.width = width or self.lw.layer.width
+        self.A_getter = lambda: self.lw.act.A
 
     @property
     def weights(self):
-        return self._layer.W.T
+        return self.lw.layer.W.T
 
     @property
     def activation(self):
-        A = self._layer.A
-        if len(A.shape) > 1:
-            return A[0]
-        else:
-            return A
-
+        return self.A_getter()[0]
 
 class Program:
     batch_windowsize = None
 
     def __init__(self, data_path="data/train.csv"):
 
+        dims = [28 * 28, 16, 16, 10]
+        layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
+        
         batchsize = 20
         valsetsize = 100
         epochs = 2
@@ -65,16 +55,20 @@ class Program:
             epochs=epochs,
         )
 
-        self.network = ModelSpecSmall()
+        self.training = Training(layers, self.it, valset)
+        validation_pipeline = self.training.validation_pipeline
+        layer_in = LayerInterface(validation_pipeline.layer_in, width=dims[0])
+        layer_in.A_getter = lambda: layer_in.lw.act.A
+        layer_out = LayerInterface(validation_pipeline.layer_out)
+        layer_out.A_getter = lambda: validation_pipeline.model.A
+        layers = [
+            layer_in,
+            *[LayerInterface(layer) for layer in self.training.validation_pipeline.layers],
+            layer_out
+            ]
 
-        self.network.load_params("params/small_50epochs_93percent")
-
-        #self.network.init_training(batchsize=batchsize, validation_set=valset)
-
-        mlp_interface = MLPInterface(self.network)
-
-        MLPVisualization.maxwidth = 20
-        self.visualization = MLPVisualization(mlp_interface, dx=10, dy=5, r=2)
+        MLPVisualization.maxwidth = 11
+        self.visualization = MLPVisualization(layers, dx=10, dy=5, r=2)
         self.visualization.layers[-1].normalize_activations = False
         for i, node in enumerate(self.visualization.layers[-1].nodes):
             node.add_label(f"{i}")
@@ -88,13 +82,6 @@ class Program:
         plt.show()
     
     def start(self, _):
-        self.visualization.clear_activations()
-        X = next(self.examples)
-        self.visualization.img.set_data(-1*X.reshape((28,28))+1)
-        _, vout = self.network.feedforward(X)
-        self.ani = self.visualization.animate_ff()
-        return
-
         self.train_loss = []
         self.train_accuracy = []
         self.val_loss = []
@@ -165,10 +152,15 @@ class Program:
         self.visualization.accuracy_plot.dataLim.x1 = xmax
 
     def update(self, n_frame):
-        try:
-            (training_loss, training_accuracy, validation_loss, validation_accuracy) = (
-                self.network.train_minibatch(next(self.it))
-            )
+        if not self.training.completed:
+            self.training.train_minibatch()
+
+            model = self.training.training_pipeline.model
+            training_loss = model.loss[0]
+            training_accuracy = model.accuracy[0]
+            model = self.training.validation_pipeline.model
+            validation_loss = model.loss[0]
+            validation_accuracy = model.accuracy[0]
 
             self.index.append(n_frame)
             self.train_loss.append(training_loss)
@@ -182,50 +174,10 @@ class Program:
             self.visualization.accuracy_plot.autoscale_view()
 
             self.visualization.update_weights()
-
-        except StopIteration:
+        else:
             self.ani.event_source.stop()
             self.ani = None
-            self.network.cleanup_training()
             print("Training ended.")
-
-
-def ModelSpecLarge():
-    class DropoutConfig:
-        enabled = True
-        p_hidden = 0.7
-        p_input = 0.8
-
-    return MLP(
-        [
-            InputLayer(28 * 28),
-            Layer(100),
-            Layer(100),
-            Layer(100),
-            Layer(100),
-            OutputLayer(10),
-        ],
-        model=MLogit,
-        optimizer=Adam(eps=0.1),
-        dropout=DropoutConfig,
-    )
-
-
-def ModelSpecSmall():
-    class DropoutConfig:
-        enabled = False
-
-    return MLP(
-        [
-            InputLayer(28 * 28),
-            Layer(16),
-            Layer(16),
-            OutputLayer(10),
-        ],
-        model=MLogit,
-        optimizer=Adam(eps=0.4),
-        dropout=DropoutConfig,
-    )
 
 
 if __name__ == "__main__":
