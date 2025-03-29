@@ -90,7 +90,7 @@ class Program:
 
         if self.batch_windowsize is None:
             self.ymax = 10
-            self.visualization.loss_plot.dataLim.y1 = self.ymax
+            #self.visualization.loss_plot.dataLim.y1 = self.ymax
             self.update_plots = self.fixed_plot_update
         else:
             self.update_plots = self.moving_window_plot_update
@@ -105,17 +105,17 @@ class Program:
 
     def fixed_plot_update(self, n_frame):
         xmax = ceil(n_frame / 100) * 100
-        self.visualization.train_loss_plot.set_xdata(self.index)
-        self.visualization.train_loss_plot.set_ydata(self.train_loss)
-        self.visualization.val_loss_plot.set_xdata(self.index)
-        self.visualization.val_loss_plot.set_ydata(self.val_loss)
+        #self.visualization.train_loss_plot.set_xdata(self.index)
+        #self.visualization.train_loss_plot.set_ydata(self.train_loss)
+        #self.visualization.val_loss_plot.set_xdata(self.index)
+        #self.visualization.val_loss_plot.set_ydata(self.val_loss)
 
         self.visualization.train_accuracy_plot.set_xdata(self.index)
         self.visualization.train_accuracy_plot.set_ydata(self.train_accuracy)
         self.visualization.val_accuracy_plot.set_xdata(self.index)
         self.visualization.val_accuracy_plot.set_ydata(self.val_accuracy)
 
-        self.visualization.loss_plot.dataLim.x1 = xmax
+        #self.visualization.loss_plot.dataLim.x1 = xmax
         self.visualization.accuracy_plot.dataLim.x1 = xmax
 
     def moving_window_plot_update(self, n_frame):
@@ -170,7 +170,7 @@ class Program:
 
             self.update_plots(n_frame)
 
-            self.visualization.loss_plot.autoscale_view()
+            #self.visualization.loss_plot.autoscale_view()
             self.visualization.accuracy_plot.autoscale_view()
 
             self.visualization.update_weights()

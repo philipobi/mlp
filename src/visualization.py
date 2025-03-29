@@ -9,6 +9,7 @@ from matplotlib.colors import (
 )
 from matplotlib.widgets import TextBox, Button
 from matplotlib.animation import FuncAnimation
+from matplotlib.gridspec import GridSpec
 import matplotlib as mpl
 import numpy as np
 from itertools import cycle
@@ -41,6 +42,8 @@ colors= [
 ]
 # fmt:on
 
+colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
+nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 
 transitionLinear = lambda i: i
 
@@ -95,10 +98,6 @@ class AnimationIterator(Iterator):
             except StopIteration:
                 self.spec = None
             return next(self)
-
-
-colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
-nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 
 
 def parse_float(s, default=None):
@@ -331,10 +330,12 @@ class LayerVisualization:
         self.m = m
 
         if n == m:
+
             def func_A(A):
                 return A
 
         else:
+
             def func_A(A):
                 return A[n:m]
 
@@ -393,26 +394,33 @@ class MLPVisualization:
         # create mpl objects
         self.fig = plt.figure()
 
-        # fmt: off
-        axs = self.fig.subplot_mosaic(
-            [
-                ["loss_plot", "btn_cmap" ,"box_dxdy", "btn_start"],
-                ["loss_plot", "graph", "graph", "graph"],   
-                ["accuracy_plot", "graph", "graph", "graph"],   
-                ["accuracy_plot", "cbar", "cbar", "cbar"]
-            ], 
-            width_ratios=[1, 0.4, 0.4, 0.4],
-            height_ratios=[
-                5,
-                45,
-                45,
-                5
-            ],
-            empty_sentinel="empty"
-        )
-        # fmt: on
+        """
+        accuracy    controls (padding, btn_cmap, box_dxdy, btn_start)
+        accuracy    empty   graph   empty
+        3d          img     graph   cbar
+        3d          img     graph   cbar
+        3d          empty   graph   empty
+        """
 
-        self.graph = axs["graph"]
+        gs = GridSpec(nrows=5, ncols=4)
+        gs.set_height_ratios((5, 25, 20, 25, 25))
+        gs.set_width_ratios((40, 10, 45, 5))
+
+        gs_controls = gs[0, 1:].subgridspec(nrows=1, ncols=4)
+        ax_btn_cmap = self.fig.add_subplot(gs_controls[0, -3])
+        ax_box_dxdy = self.fig.add_subplot(gs_controls[0, -2])
+        ax_btn_start = self.fig.add_subplot(gs_controls[0, -1])
+        gs_controls.set_width_ratios((70, 10, 10, 10))
+
+        ax_accuracy = self.fig.add_subplot(gs[:2, 0])
+        ax_loss_projection = self.fig.add_subplot(gs[2:, 0], projection="3d")
+        ax_img = self.fig.add_subplot(gs[2:4, 1])
+        ax_graph = self.fig.add_subplot(gs[1:, 2])
+        ax_cbar = self.fig.add_subplot(gs[2:4, 3])
+
+        gs.tight_layout(self.fig)
+
+        self.graph = ax_graph
         self.graph.axis("off")
         self.graph.set_aspect("equal")
 
@@ -518,32 +526,22 @@ class MLPVisualization:
             self.graph.add_collection(layer.node_activations)
 
         # make controls
-        self.box_dxdy = TextBox(
-            ax=axs["box_dxdy"], label="(dx, dy)", textalignment="left"
-        )
+        self.box_dxdy = TextBox(ax=ax_box_dxdy, label="(dx, dy)", textalignment="left")
         self.box_dxdy.on_submit(self.update_geometry)
         self.box_dxdy.set_val(f"{Context.dx}, {Context.dy}")
-        self.btn_start = Button(ax=axs["btn_start"], label="Start")
+        self.btn_start = Button(ax=ax_btn_start, label="Start")
 
-        self.img = None #axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
+        self.img = (
+            None  # axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
+        )
 
         # make loss plots
         self.loss_plot = None
         self.accuracy_plot = None
         if 1:
-            self.loss_plot = axs["loss_plot"]
-            self.train_loss_plot = self.loss_plot.plot(
-                [], [], label="Training Loss", color="blue"
-            )[0]
-            self.val_loss_plot = self.loss_plot.plot(
-                [], [], label="Validation Loss", color="red"
-            )[0]
-            self.loss_plot.legend()
-            self.loss_plot.dataLim.x0 = 0
-            self.loss_plot.dataLim.y0 = 0
-
             # make accuracy plots
-            self.accuracy_plot = axs["accuracy_plot"]
+            self.accuracy_plot = ax_accuracy
+            ax_accuracy.grid()
             self.train_accuracy_plot = self.accuracy_plot.plot(
                 [], [], label="Training Accuracy", color="blue"
             )[0]
@@ -558,17 +556,17 @@ class MLPVisualization:
         # setup cmap and cbar
         cmap.set(
             mpl.colormaps["viridis"],
-            #LinearSegmentedColormap.from_list("cmap", list(zip(nodes, colors))),
-            mpl.colormaps["Pastel1"],
             mpl.colormaps["tab20c"],
+            # LinearSegmentedColormap.from_list("cmap", list(zip(nodes, colors))),
+            mpl.colormaps["coolwarm"],
         )
 
         cmap.norm = SymLogNorm(linthresh=0.03)
-        self.cbar_ax = axs["cbar"]
+        self.cbar_ax = ax_cbar
         self.make_cbar()
 
         # add button for switching cbar
-        self.btn_cmap = Button(ax=axs["btn_cmap"], label="Switch cmap")
+        self.btn_cmap = Button(ax=ax_btn_cmap, label="Switch cmap")
         self.btn_cmap.on_clicked(self.switch_cmap)
 
         # init weight colors
@@ -582,7 +580,8 @@ class MLPVisualization:
         self.cbar = self.fig.colorbar(
             mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=cmap.cmap),
             cax=self.cbar_ax,
-            orientation="horizontal",
+            location="left",
+            orientation="vertical",
             label=r"$\text{LogNorm}(W_{ij})$",
         )
 
