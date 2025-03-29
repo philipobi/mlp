@@ -39,7 +39,7 @@ def main():
         ),
     )
 
-    view = ProjectionView(ax, proj_layers, X=X, Y=Y, update_interval=50)
+    view = ProjectionView(ax, proj_layers, X=X, Y=Y, update_interval=10)
 
     training = Training(layers, it, valset, alpha=0.03)
 

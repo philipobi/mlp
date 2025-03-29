@@ -9,6 +9,46 @@ def linspace(start, stop, num, out):
     for i in range(num):
         out[i] = start + i * d
 
+class LimitsControl:
+    def __init__(self, i_update=2, default_lim=(0, 1000)):
+        self.xmin_def, self.xmax_def = default_lim
+        self.xmin, self.xmax = default_lim
+        self.i_update = i_update
+        self.i_xmax = self.i_xmin = 0
+
+    def update(self, xmin, xmax):
+        #bug: xmin can become greater than xmax
+        xmin_, xmax_ = (self.xmin, self.xmax)
+        update = False
+        pad = min((xmax_ - xmin_)/2, 10)
+        print(xmin, xmax, xmin_, xmax_, pad)
+
+        if xmax_ <= xmax:
+            self.xmax = min(xmax + pad, self.xmax_def)
+            update = True
+        elif xmax < xmax_ - pad:
+            self.i_xmax += 1
+            if self.i_xmax == self.i_update:
+                self.i_xmax = 0
+                self.xmax = min(xmax + pad, self.xmax_def)
+                update = True
+        
+        if xmin <= xmin_:
+            self.xmin = max(xmin - pad, self.xmin_def)
+            update = True
+        elif xmin_ + pad < xmin:
+            self.i_xmin += 1
+            if self.i_xmin == self.i_update:
+                self.i_xmin = 0
+                self.xmin = max(xmin - pad, self.xmin_def)
+                update = True
+
+        return update
+    
+    @property
+    def lim(self):
+        return (self.xmin, self.xmax)
+
 
 class DescentPath:
     def __init__(self, ax, n_samples=1000):
@@ -200,12 +240,13 @@ class ProjectionView:
         self.grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
         [self.ax1, self.ax2] = self.grid.axes
         self.domain = ProjectionDomain(self.ax1, self.ax2)
+        self.zlim_domain = LimitsControl()
 
         self.descent_path = DescentPath(self.ax, n_samples=500)
         self.surface = None
 
         self.redraw()
-
+    
     def draw_frame(self):
         self.i += 1
 
@@ -217,6 +258,7 @@ class ProjectionView:
             self.redraw()
 
         self.descent_path.update(*self.interpolate(x, y))
+
 
     def interpolate(self, x1, x2):
         [x3] = self.interp([x1, x2])
@@ -236,9 +278,10 @@ class ProjectionView:
 
         self.ax.set_xlim(*ax1.lim)
         self.ax.set_ylim(*ax2.lim)
-        self.min_values.append(np.min(grid))
-        self.max_values.append(np.max(grid))
-        self.ax.set_zlim(max(0, min(500, min(self.min_values) - 0.5)), min(1000, max(self.max_values)))
+        lims = (np.min(grid), np.max(grid))
+        print(lims)
+        if self.zlim_domain.update(*lims):
+            self.ax.set_zlim(*self.zlim_domain.lim)
 
 
 class ProjectionDomain:
