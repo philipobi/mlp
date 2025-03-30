@@ -1,11 +1,12 @@
 import numpy as np
 from mlp import Layer, Training
-from visualization import MLPVisualization
+from visualization import MLPVisualization, SimplePlot
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from math import ceil
-from utils import epoch_it
-from itertools import count, cycle
+from utils import epoch_it, callback_it
+from projection import ProjectionView, ProjectionLayer, ProjectionAxis
+
 
 def init_training_data(path, batchsize, valsetsize, epochs):
 
@@ -22,7 +23,17 @@ def init_training_data(path, batchsize, valsetsize, epochs):
 
     return (N, it, valset)
 
+
 class LayerInterface:
+    i = 0
+    n_examples = None
+
+    @classmethod
+    def next_example(cls):
+        cls.i += 1
+        if cls.i == cls.n_examples:
+            cls.i = 0
+
     def __init__(self, layer_wrapped, width=None):
         self.lw = layer_wrapped
         self.width = width or self.lw.layer.width
@@ -34,16 +45,24 @@ class LayerInterface:
 
     @property
     def activation(self):
-        return self.A_getter()[0]
+        return self.A_getter()[self.i]
+
 
 class Program:
     batch_windowsize = None
 
     def __init__(self, data_path="data/train.csv"):
 
+        path = "params/small_50epochs_93percent"
         dims = [28 * 28, 16, 16, 10]
         layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-        
+        if 0:
+            for i, layer in enumerate(layers, start=1):
+                layer.load_params(
+                    wpath=path + f"/W{i}.npy",
+                    bpath=path + f"/b{i}.npy",
+                )
+
         batchsize = 20
         valsetsize = 100
         epochs = 2
@@ -55,125 +74,109 @@ class Program:
             epochs=epochs,
         )
 
+        LayerInterface.n_examples = valsetsize
+
         self.training = Training(layers, self.it, valset)
         validation_pipeline = self.training.validation_pipeline
         layer_in = LayerInterface(validation_pipeline.layer_in, width=dims[0])
         layer_in.A_getter = lambda: layer_in.lw.act.A
+        self.layer_in = layer_in
         layer_out = LayerInterface(validation_pipeline.layer_out)
         layer_out.A_getter = lambda: validation_pipeline.model.A
-        layers = [
+        interface_layers = [
             layer_in,
-            *[LayerInterface(layer) for layer in self.training.validation_pipeline.layers],
-            layer_out
-            ]
+            *[
+                LayerInterface(layer)
+                for layer in self.training.validation_pipeline.layers
+            ],
+            layer_out,
+        ]
 
-        MLPVisualization.maxwidth = 11
-        self.visualization = MLPVisualization(layers, dx=10, dy=5, r=2)
+        MLPVisualization.maxwidth = 10
+        self.visualization = MLPVisualization(interface_layers, dx=10, dy=5, r=2)
         self.visualization.layers[-1].normalize_activations = False
         for i, node in enumerate(self.visualization.layers[-1].nodes):
             node.add_label(f"{i}")
+
+        # Set up descent projection
+        X, Y = valset
+        proj_layers = [ProjectionLayer(layer) for layer in layers]
+        proj_layer = proj_layers[-1]
+        proj_layer.add_axes(
+            b=(ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),),
+            W=(ProjectionAxis(arr=proj_layer.layer.W, pos=(7, 0), num=100),),
+        )
+        self.projection_view = ProjectionView(
+            self.visualization.ax_loss_projection,
+            proj_layers,
+            X=X,
+            Y=Y,
+            update_interval=100,
+        )
+
+        # Set up accuracy plot
+        self.accuracy_plot = SimplePlot(
+            ax=self.visualization.accuracy_plot,
+            xlims=(0, 100),
+            ylims=(0, 1),
+            n_plots=2,
+            plot_kwargs=(
+                dict(label="Training Accuracy", color="blue"),
+                dict(label="Validation Accuracy", color="red"),
+            ),
+        )
 
         self.ani = None
 
         self.visualization.btn_start.on_clicked(self.start)
 
-        self.examples = cycle([img for img in valset[0]])
+        self.training.train_minibatch()
 
         plt.show()
-    
+
     def start(self, _):
-        self.train_loss = []
-        self.train_accuracy = []
-        self.val_loss = []
-        self.val_accuracy = []
-        self.index = []
-
-        if self.batch_windowsize is None:
-            self.ymax = 10
-            #self.visualization.loss_plot.dataLim.y1 = self.ymax
-            self.update_plots = self.fixed_plot_update
-        else:
-            self.update_plots = self.moving_window_plot_update
-
         self.ani = FuncAnimation(
             self.visualization.fig,
             self.update,
-            frames=count(start=1),
             interval=20,
             cache_frame_data=False,
         )
-
-    def fixed_plot_update(self, n_frame):
-        xmax = ceil(n_frame / 100) * 100
-        #self.visualization.train_loss_plot.set_xdata(self.index)
-        #self.visualization.train_loss_plot.set_ydata(self.train_loss)
-        #self.visualization.val_loss_plot.set_xdata(self.index)
-        #self.visualization.val_loss_plot.set_ydata(self.val_loss)
-
-        self.visualization.train_accuracy_plot.set_xdata(self.index)
-        self.visualization.train_accuracy_plot.set_ydata(self.train_accuracy)
-        self.visualization.val_accuracy_plot.set_xdata(self.index)
-        self.visualization.val_accuracy_plot.set_ydata(self.val_accuracy)
-
-        #self.visualization.loss_plot.dataLim.x1 = xmax
-        self.visualization.accuracy_plot.dataLim.x1 = xmax
-
-    def moving_window_plot_update(self, n_frame):
-        self.index = self.index[-self.batch_windowsize :]
-        self.train_loss = self.train_loss[-self.batch_windowsize :]
-        self.train_accuracy = self.train_accuracy[-self.batch_windowsize :]
-        self.val_loss = self.val_loss[-self.batch_windowsize :]
-        self.val_accuracy = self.val_accuracy[-self.batch_windowsize :]
-
-        xmin = self.index[0]
-        xmax = max(self.batch_windowsize, self.index[-1])
-
-        # update loss plots
-        self.visualization.train_loss_plot.set_xdata(self.index)
-        self.visualization.train_loss_plot.set_ydata(self.train_loss)
-
-        self.visualization.val_loss_plot.set_xdata(self.index)
-        self.visualization.val_loss_plot.set_ydata(self.val_loss)
-
-        self.visualization.loss_plot.dataLim.x0 = xmin
-        self.visualization.loss_plot.dataLim.x1 = xmax
-        self.visualization.loss_plot.dataLim.y1 = max(
-            max(self.train_loss), max(self.val_loss)
+        return
+        it = callback_it(
+            self.visualization.animate_ff(),
+            init_func=lambda: (
+                self.visualization.clear_activations(),
+                self.visualization.ax_img.imshow(
+                    cmap="gray_r",
+                    vmin=0,
+                    vmax=1,
+                    X=np.reshape(self.layer_in.activation, shape=(28, 28)),
+                ),
+            ),
+            callback=lambda: LayerInterface.next_example(),
         )
-
-        # update accuracy plots
-        self.visualization.train_accuracy_plot.set_xdata(self.index)
-        self.visualization.train_accuracy_plot.set_ydata(self.train_accuracy)
-
-        self.visualization.val_accuracy_plot.set_xdata(self.index)
-        self.visualization.val_accuracy_plot.set_ydata(self.val_accuracy)
-
-        self.visualization.accuracy_plot.dataLim.x0 = xmin
-        self.visualization.accuracy_plot.dataLim.x1 = xmax
+        self.ani = FuncAnimation(
+            fig=self.visualization.fig,
+            func=lambda _: None,
+            frames=it,
+            cache_frame_data=False,
+            interval=20,
+        )
 
     def update(self, n_frame):
         if not self.training.completed:
             self.training.train_minibatch()
 
             model = self.training.training_pipeline.model
-            training_loss = model.loss[0]
             training_accuracy = model.accuracy[0]
             model = self.training.validation_pipeline.model
-            validation_loss = model.loss[0]
             validation_accuracy = model.accuracy[0]
 
-            self.index.append(n_frame)
-            self.train_loss.append(training_loss)
-            self.train_accuracy.append(training_accuracy)
-            self.val_loss.append(validation_loss)
-            self.val_accuracy.append(validation_accuracy)
-
-            self.update_plots(n_frame)
-
-            #self.visualization.loss_plot.autoscale_view()
-            self.visualization.accuracy_plot.autoscale_view()
+            self.accuracy_plot.update(n_frame, training_accuracy, validation_accuracy)
 
             self.visualization.update_weights()
+
+            self.projection_view.draw_frame()
         else:
             self.ani.event_source.stop()
             self.ani = None

@@ -12,7 +12,8 @@ from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
 import matplotlib as mpl
 import numpy as np
-from itertools import cycle
+from itertools import cycle, zip_longest
+from utils import Iterator, flatten
 
 PatchCollection.update_objects = lambda self: self.set_paths(self.objects)
 
@@ -48,28 +49,53 @@ nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 transitionLinear = lambda i: i
 
 
-class Iterator:
-    def __iter__(self):
-        return self
+class SimplePlot:
+    def __init__(
+        self,
+        ax,
+        xlims,
+        ylims,
+        n_plots=1,
+        n_samples=200,
+        x_increment=100,
+        plot_kwargs=(),
+    ):
+        self.ax = ax
+        self.ax.grid()
+        _, self.xmax = xlims
+        self.ax.set_xlim(*xlims)
+        self.ax.set_ylim(*ylims)
+        self.x_increment = x_increment
+        self.n_samples = n_samples
+        self.plots = [
+            self.ax.plot([], [], **kwargs)[0]
+            for _, kwargs in zip_longest(range(n_plots), plot_kwargs, fillvalue={})
+        ]
+        self.i = 0
+        self.data = np.empty((2 * n_samples, n_plots + 1))
+        self.data_ = np.empty_like(self.data)
 
+    def reduce(self):
+        self.data_[: self.n_samples] = self.data[::2]
+        (self.data, self.data_) = (self.data_, self.data)
+        self.i = self.n_samples
 
-class flatten(Iterator):
-    def __init__(self, it, dim):
-        if not dim > 0:
-            raise ValueError("Dimension must be greater than 0")
-        self.dim = dim
-        self.its = [iter(it)]
+    def update(self, x, *args):
+        if self.i == 2 * self.n_samples:
+            self.reduce()
+            self.update(x, *args)
+        self.data[self.i, :] = [x, *args]
+        self.i += 1
 
-    def __next__(self):
-        try:
-            while len(self.its) != self.dim:
-                self.its.append(iter(next(self.its[-1])))
-            return next(self.its[-1])
-        except StopIteration:
-            if len(self.its) == 1:
-                raise
-            self.its.pop()
-            return next(self)
+        if x == self.xmax:
+            self.xmax += self.x_increment
+            self.ax.set_xlim(None, self.xmax)
+
+        data = self.data[: self.i].T
+        x = data[0]
+        for i, plot in enumerate(self.plots, start=1):
+            plot.set_xdata(x)
+            plot.set_ydata(data[i])
 
 
 class AnimationSpec:
@@ -233,7 +259,7 @@ class LayerVisualization:
         self.node_activations = PatchCollection(
             [],
             transform=self.ctx.graph.transData,
-            facecolor="black",
+            facecolor="#bdbdbd",
             linewidth=0,
             zorder=2,
         )
@@ -529,11 +555,10 @@ class MLPVisualization:
         self.box_dxdy = TextBox(ax=ax_box_dxdy, label="(dx, dy)", textalignment="left")
         self.box_dxdy.on_submit(self.update_geometry)
         self.box_dxdy.set_val(f"{Context.dx}, {Context.dy}")
-        self.btn_start = Button(ax=ax_btn_start, label="Start")
+        self.btn_start = Button(ax=ax_btn_start, label="Start/Pause")
 
-        self.img = (
-            None  # axs["img"].imshow(cmap="gray", vmin=0, vmax=1, X=np.ones((28, 28)))
-        )
+        self.ax_img = ax_img
+        self.ax_loss_projection = ax_loss_projection
 
         # make loss plots
         self.loss_plot = None
@@ -639,25 +664,14 @@ class MLPVisualization:
 
     def animate_ff(self):
 
-        frames = 30
-        interval = 0.05
-
         frames = AnimationIterator(
             flatten(
                 map(lambda layer: layer.animate_activation(frames=30), self.layers),
                 dim=2,
             )
         )
-        self.ani = FuncAnimation(
-            self.fig,
-            frames=frames,
-            func=lambda _: None,
-            interval=0.05,
-            repeat=False,
-            cache_frame_data=False,
-        )
 
-        return self.ani
+        yield from frames
 
     def clear_activations(self):
         for layer in self.layers:

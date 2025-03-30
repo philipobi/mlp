@@ -181,7 +181,7 @@ class ProjectionGrid:
     def compute(self):
         self.pipeline.feedforward(self.X)
         self.pipeline.run_model(Y=self.Y)
-        #self.compute_scaled()
+        # self.compute_scaled()
 
     def redraw(self):
         """
@@ -196,6 +196,33 @@ class ProjectionGrid:
     @property
     def grid(self):
         return np.squeeze(self.pipeline.model.loss)
+
+
+class ProjectionDomain:
+    def __init__(self, ax1, ax2, d=None):
+        self.ax1 = ax1
+        self.ax2 = ax2
+
+        for ax in (self.ax1, self.ax2):
+            x = ax.x0
+            d = d or abs(x) / 8 or 1
+            ax.lim = (x - d, x + d)
+
+    def update(self, x1, x2):
+        redraw = False
+        for ax, x in ((self.ax1, x1), (self.ax2, x2)):
+            xmin, xmax = ax.lim
+            d = xmax - xmin
+            margin = d / 16
+            pad = d / 8
+            if xmax - x < margin:
+                xmax = x + pad
+                redraw = True
+            if x - xmin < margin:
+                xmin = x - pad
+                redraw = True
+            ax.lim = (xmin, xmax)
+        return redraw
 
 
 class ProjectionView:
@@ -253,30 +280,3 @@ class ProjectionView:
         self.ax.set_ylim(*ax2.lim)
 
         self.ax.set_zlim(max(np.min(grid), 0), min(np.max(grid), 1000))
-
-
-class ProjectionDomain:
-    def __init__(self, ax1, ax2, d=None):
-        self.ax1 = ax1
-        self.ax2 = ax2
-
-        for ax in (self.ax1, self.ax2):
-            x = ax.x0
-            d = d or abs(x) / 8 or 1
-            ax.lim = (x - d, x + d)
-
-    def update(self, x1, x2):
-        redraw = False
-        for ax, x in ((self.ax1, x1), (self.ax2, x2)):
-            xmin, xmax = ax.lim
-            d = xmax - xmin
-            margin = d / 16
-            pad = d / 8
-            if xmax - x < margin:
-                xmax = x + pad
-                redraw = True
-            if x - xmin < margin:
-                xmin = x - pad
-                redraw = True
-            ax.lim = (xmin, xmax)
-        return redraw
