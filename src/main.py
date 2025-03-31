@@ -185,6 +185,7 @@ class Program:
 
     def start(self, _):
         i = count()
+        self.visualization.ax_loss_projection.clear()
         self.ani = FuncAnimation(
             fig=self.visualization.fig,
             func=lambda _: print("frame", next(i)),
