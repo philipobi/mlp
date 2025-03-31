@@ -4,8 +4,10 @@ from visualization import MLPVisualization, SimplePlot
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from math import ceil
-from utils import epoch_it, callback_it
+from utils import epoch_it, callback_it, task_it
 from projection import ProjectionView, ProjectionLayer, ProjectionAxis
+from time import sleep
+from itertools import count, chain
 
 
 def init_training_data(path, batchsize, valsetsize, epochs):
@@ -56,13 +58,15 @@ class Program:
         path = "params/small_50epochs_93percent"
         dims = [28 * 28, 16, 16, 10]
         layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-        if 0:
+        if 1:
             for i, layer in enumerate(layers, start=1):
                 layer.load_params(
                     wpath=path + f"/W{i}.npy",
                     bpath=path + f"/b{i}.npy",
                 )
 
+        self.empty_img = np.zeros((28, 28))
+        
         batchsize = 20
         valsetsize = 100
         epochs = 2
@@ -130,38 +134,75 @@ class Program:
 
         self.visualization.btn_start.on_clicked(self.start)
 
+        self.plot_img(self.empty_img)
+        
         self.training.train_minibatch()
-
+        
         plt.show()
 
+
+    def plot_img(self, X):
+        self.visualization.ax_img.imshow(
+            cmap="gray_r",
+            vmin=0,
+            vmax=1,
+            X=X,
+        )
+
+    def animate_ff(self):
+        return chain(
+            task_it(
+                lambda: print("started animation"),
+                lambda: self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
+                lambda: self.visualization.switch_cmap(),
+            ),
+            self.visualization.animate_ff(),
+            task_it(
+                lambda: sleep(3),
+                lambda: LayerInterface.next_example(),
+                lambda: self.visualization.clear_activations(),
+                lambda: self.plot_img(self.empty_img),
+                lambda: self.visualization.switch_cmap(),
+            )
+
+        )
+        
+        return callback_it(
+            init_func=lambda: (
+                print("started animation"),
+                self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
+                self.visualization.switch_cmap(),
+            ),
+            it=self.visualization.animate_ff(),
+            callback=lambda: (
+                sleep(3),
+                LayerInterface.next_example(),
+                self.visualization.clear_activations(),
+                self.plot_img(self.empty_img),
+                self.visualization.switch_cmap(),
+            ),
+        )
+
     def start(self, _):
+        i = count()
+        self.ani = FuncAnimation(
+            fig=self.visualization.fig,
+            func=lambda _: print("frame", next(i)),
+            frames=self.animate_ff(),
+            cache_frame_data=False,
+            interval=1,
+            repeat=False
+        )
+        
+        return 
+        
         self.ani = FuncAnimation(
             self.visualization.fig,
             self.update,
             interval=20,
             cache_frame_data=False,
         )
-        return
-        it = callback_it(
-            self.visualization.animate_ff(),
-            init_func=lambda: (
-                self.visualization.clear_activations(),
-                self.visualization.ax_img.imshow(
-                    cmap="gray_r",
-                    vmin=0,
-                    vmax=1,
-                    X=np.reshape(self.layer_in.activation, shape=(28, 28)),
-                ),
-            ),
-            callback=lambda: LayerInterface.next_example(),
-        )
-        self.ani = FuncAnimation(
-            fig=self.visualization.fig,
-            func=lambda _: None,
-            frames=it,
-            cache_frame_data=False,
-            interval=20,
-        )
+
 
     def update(self, n_frame):
         if not self.training.completed:

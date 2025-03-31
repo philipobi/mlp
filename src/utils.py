@@ -67,3 +67,9 @@ class callback_it(Iterator):
                 self.callback = None
                 return None
         return next(self.it)
+    
+class task_it(Iterator):
+    def __init__(self, *tasks):
+        self.tasks = iter(tasks)
+    def __next__(self):
+        return next(self.tasks)()

@@ -123,7 +123,7 @@ class AnimationIterator(Iterator):
                 return None
             except StopIteration:
                 self.spec = None
-            return next(self)
+                return next(self)
 
 
 def parse_float(s, default=None):
@@ -335,7 +335,7 @@ class LayerVisualization:
                 transition=transitionLinear,
                 frames=20,
             ),
-            AnimationSpec(func=func, transition=transitionLinear, frames=frames),
+            AnimationSpec(func=func, transition=transitionLinear, frames=15),
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(1 - i),
                 transition=transitionLinear,
@@ -558,6 +558,8 @@ class MLPVisualization:
         self.btn_start = Button(ax=ax_btn_start, label="Start/Pause")
 
         self.ax_img = ax_img
+        self.ax_img.axis("off")
+
         self.ax_loss_projection = ax_loss_projection
 
         # make loss plots
@@ -664,14 +666,14 @@ class MLPVisualization:
 
     def animate_ff(self):
 
-        frames = AnimationIterator(
+        yield from AnimationIterator(
             flatten(
                 map(lambda layer: layer.animate_activation(frames=30), self.layers),
                 dim=2,
             )
         )
 
-        yield from frames
+        #return frames
 
     def clear_activations(self):
         for layer in self.layers:
