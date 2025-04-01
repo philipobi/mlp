@@ -4,7 +4,7 @@ from visualization import MLPVisualization, SimplePlot
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from math import ceil
-from utils import epoch_it, callback_it, task_it
+from utils import epoch_it, callback_it, Timer, repeat_it
 from projection import ProjectionView, ProjectionLayer, ProjectionAxis
 from time import sleep
 from itertools import count, chain
@@ -58,7 +58,7 @@ class Program:
         path = "params/small_50epochs_93percent"
         dims = [28 * 28, 16, 16, 10]
         layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-        if 1:
+        if 0:
             for i, layer in enumerate(layers, start=1):
                 layer.load_params(
                     wpath=path + f"/W{i}.npy",
@@ -149,49 +149,64 @@ class Program:
             X=X,
         )
 
-    def animate_ff(self):
-        return chain(
-            task_it(
-                lambda: print("started animation"),
-                lambda: self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
-                lambda: self.visualization.switch_cmap(),
-            ),
-            self.visualization.animate_ff(),
-            task_it(
-                lambda: sleep(3),
-                lambda: LayerInterface.next_example(),
-                lambda: self.visualization.clear_activations(),
-                lambda: self.plot_img(self.empty_img),
-                lambda: self.visualization.switch_cmap(),
-            )
-
-        )
+    def animate_training(self, n):
+        """
+        Train on n minibatches, then update plots (accuracy, weights, 3D)
+        """
+        for _ in range(n):
+            self.training.train_minibatch()
+        self.i_training += n
         
+        model = self.training.training_pipeline.model
+        training_accuracy = model.accuracy[0]
+        model = self.training.validation_pipeline.model
+        validation_accuracy = model.accuracy[0]
+
+        self.accuracy_plot.update(self.i_training, training_accuracy, validation_accuracy)
+        self.visualization.update_weights()
+        self.projection_view.draw_frame()
+
+    
+    def animate_ff(self):
         return callback_it(
-            init_func=lambda: (
-                print("started animation"),
+            init_func=lambda :(
+                self.visualization.ax_loss_projection.set_visible(False),
+                self.visualization.ax_accuracy.set_visible(False),
                 self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
                 self.visualization.switch_cmap(),
             ),
             it=self.visualization.animate_ff(),
-            callback=lambda: (
+            callback=lambda:(
                 sleep(3),
                 LayerInterface.next_example(),
                 self.visualization.clear_activations(),
                 self.plot_img(self.empty_img),
                 self.visualization.switch_cmap(),
-            ),
+                self.visualization.ax_loss_projection.set_visible(True),
+                self.visualization.ax_accuracy.set_visible(True),
+            )
         )
 
     def start(self, _):
-        i = count()
-        self.visualization.ax_loss_projection.clear()
+        self.i_training = 1
         self.ani = FuncAnimation(
-            fig=self.visualization.fig,
-            func=lambda _: print("frame", next(i)),
+            fig = self.visualization.fig,
+            func= lambda _: None,
+            frames=repeat_it(lambda: self.animate_training(5), 100),
+            cache_frame_data=False,
+            interval=10,
+            repeat=False
+        )
+        
+        
+        return
+        timer = Timer()
+        self.ani = FuncAnimation(
+            fig = self.visualization.fig,
+            func= lambda _: timer.log(),
             frames=self.animate_ff(),
             cache_frame_data=False,
-            interval=1,
+            interval=0,
             repeat=False
         )
         

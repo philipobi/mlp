@@ -8,43 +8,13 @@ from matplotlib.colors import (
     ListedColormap,
 )
 from matplotlib.widgets import TextBox, Button
-from matplotlib.animation import FuncAnimation
 from matplotlib.gridspec import GridSpec
 import matplotlib as mpl
 import numpy as np
 from itertools import cycle, zip_longest
-from utils import Iterator, flatten
+from utils import Iterator, flatten, cmap_red_green, Array
 
 PatchCollection.update_objects = lambda self: self.set_paths(self.objects)
-
-# fmt:off
-# red -> green
-colors= [
-    (0.62745098, 0.00784314, 0.12156863,),
-    (0.6674356,  0.00984237, 0.10557478,),
-    (0.70695886, 0.01214917, 0.08981161,),
-    (0.73710111, 0.02291426, 0.07904652,),
-    (0.76509035, 0.03260285, 0.06874279,),
-    (0.7952326,  0.04121492, 0.05582468,),
-    (0.82537486, 0.07128028, 0.07128028,),
-    (0.86412918, 0.16816609, 0.16816609,),
-    (0.90025515, 0.26003441, 0.26003441,),
-    (0.93940093, 0.3622484,  0.3622484,),
-    (0.36123713, 0.80906023, 0.28369353,),
-    (0.26554744, 0.75904062, 0.20757673,),
-    (0.17723952, 0.71164937, 0.13856209,),
-    (0.08250673, 0.65997693, 0.06535948,),
-    (0.0544406,  0.61637832, 0.05582468,),
-    (0.04798155, 0.57116494, 0.06874279,),
-    (0.04875048, 0.53425606, 0.08750481,),
-    (0.0509035,  0.49550173, 0.10903499,),
-    (0.0413687,  0.45182622, 0.11749327,),
-    (0.03137255, 0.40784314, 0.1254902,),
-]
-# fmt:on
-
-colors = ["#e6550d", "#fdd0a2", "#bdbdbd", "#c7e9c0", "#31a354"]
-nodes = [0.0, 0.49, 0.5, 0.51, 1.0]
 
 transitionLinear = lambda i: i
 
@@ -56,7 +26,7 @@ class SimplePlot:
         xlims,
         ylims,
         n_plots=1,
-        n_samples=200,
+        datalen=10000,
         x_increment=100,
         plot_kwargs=(),
     ):
@@ -66,32 +36,21 @@ class SimplePlot:
         self.ax.set_xlim(*xlims)
         self.ax.set_ylim(*ylims)
         self.x_increment = x_increment
-        self.n_samples = n_samples
+        self.arr = Array(shape=(datalen, n_plots + 1))
+
         self.plots = [
             self.ax.plot([], [], **kwargs)[0]
             for _, kwargs in zip_longest(range(n_plots), plot_kwargs, fillvalue={})
         ]
-        self.i = 0
-        self.data = np.empty((2 * n_samples, n_plots + 1))
-        self.data_ = np.empty_like(self.data)
-
-    def reduce(self):
-        self.data_[: self.n_samples] = self.data[::2]
-        (self.data, self.data_) = (self.data_, self.data)
-        self.i = self.n_samples
 
     def update(self, x, *args):
-        if self.i == 2 * self.n_samples:
-            self.reduce()
-            self.update(x, *args)
-        self.data[self.i, :] = [x, *args]
-        self.i += 1
+        self.arr.insert([x, *args])
 
-        if x == self.xmax:
+        if x >= self.xmax:
             self.xmax += self.x_increment
             self.ax.set_xlim(None, self.xmax)
 
-        data = self.data[: self.i].T
+        data = self.arr.data.T
         x = data[0]
         for i, plot in enumerate(self.plots, start=1):
             plot.set_xdata(x)
@@ -562,13 +521,14 @@ class MLPVisualization:
 
         self.ax_loss_projection = ax_loss_projection
 
+        self.ax_accuracy = ax_accuracy
+
         # make loss plots
         self.loss_plot = None
         self.accuracy_plot = None
         if 1:
             # make accuracy plots
             self.accuracy_plot = ax_accuracy
-            ax_accuracy.grid()
             self.train_accuracy_plot = self.accuracy_plot.plot(
                 [], [], label="Training Accuracy", color="blue"
             )[0]
@@ -582,10 +542,8 @@ class MLPVisualization:
 
         # setup cmap and cbar
         cmap.set(
-            mpl.colormaps["viridis"],
             mpl.colormaps["tab20c"],
-            # LinearSegmentedColormap.from_list("cmap", list(zip(nodes, colors))),
-            mpl.colormaps["coolwarm"],
+            cmap_red_green,
         )
 
         cmap.norm = SymLogNorm(linthresh=0.03)
@@ -673,7 +631,7 @@ class MLPVisualization:
             )
         )
 
-        #return frames
+        # return frames
 
     def clear_activations(self):
         for layer in self.layers:

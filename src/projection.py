@@ -2,6 +2,7 @@ import numpy as np
 from mlp import LayerWrapper, pipeline
 from scipy.interpolate import RegularGridInterpolator
 from collections import deque
+from utils import Array
 
 
 def linspace(start, stop, num, out):
@@ -25,28 +26,15 @@ class LimitsControl:
 
 
 class DescentPath:
-    def __init__(self, ax, n_samples=200):
-        self.n = n_samples
-        self.arr0 = np.empty((2 * self.n, 3))
-        self.arr1 = np.empty_like(self.arr0)
-        self.i = 0
+    def __init__(self, ax, len):
+        self.arr_ = Array(shape=(len, 3))
         self.path = ax.plot(xs=[], ys=[], zs=[], color="red", lw=2)[0]
 
-    def reduce(self):
-        self.arr1[: self.n] = self.arr0[-self.n :]
-        (self.arr0, self.arr1) = (self.arr1, self.arr0)
-        self.i = self.n
-
     def redraw(self, interp):
-        self.arr[2][:] = interp(self.arr0[: self.i, :2])
+        self.arr[2][:] = interp(self.arr[:2].T)
 
     def append(self, x, y, z):
-        if self.i < 2 * self.n:
-            self.arr0[self.i] = [x, y, z]
-            self.i += 1
-        else:
-            self.reduce()
-            self.append(x, y, z)
+        self.arr_.insert([x, y, z])
 
     def update(self, x, y, z):
         self.append(x, y, z)
@@ -54,7 +42,7 @@ class DescentPath:
 
     @property
     def arr(self):
-        return self.arr0[: self.i].T
+        return self.arr_.data.T
 
 
 class ProjectionAxis:
@@ -226,7 +214,7 @@ class ProjectionDomain:
 
 
 class ProjectionView:
-    def __init__(self, ax, proj_layers, X, Y, update_interval=10):
+    def __init__(self, ax, proj_layers, X, Y, update_interval=10, pathlen=10000):
         self.update_interval = update_interval
         self.i = 0
 
@@ -241,7 +229,7 @@ class ProjectionView:
         self.domain = ProjectionDomain(self.ax1, self.ax2)
         self.zlim_domain = LimitsControl()
 
-        self.descent_path = DescentPath(self.ax, n_samples=500)
+        self.descent_path = DescentPath(self.ax, len=pathlen)
         self.surface = None
 
         self.redraw()
