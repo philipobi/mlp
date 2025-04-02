@@ -60,7 +60,7 @@ class relu:
 class mlogit:
     def __init__(self):
 
-        def func(Z, A_m1, Y=None, bprop=False, accuracy=False):
+        def func(Z, A_m1, Y=None, loss=False, bprop=False, accuracy=False):
             # compute activations
             np.max(Z, axis=-1, out=self.Z_max_)
             np.subtract(Z, np.expand_dims(self.Z_max_, axis=-1), out=self.A)
@@ -69,16 +69,16 @@ class mlogit:
             np.divide(self.A, np.expand_dims(self.Z_exp_sum_, axis=-1), out=self.A)
 
             # compute batch loss
-            if Y is not None:
+            if loss:
                 np.log(self.Z_exp_sum_, out=self.arr)
                 np.add(self.arr, self.Z_max_, out=self.arr)
                 np.subtract(self.arr, Z[self.index, ..., Y], out=self.arr)
                 np.mean(self.arr, axis=0, keepdims=True, out=self.loss)
 
-                if accuracy:
-                    np.argmax(self.A, axis=-1, out=self.AY)
-                    np.equal(self.AY, Y, out=self.AY)
-                    np.mean(self.AY, axis=0, keepdims=True, out=self.accuracy)
+            if accuracy:
+                np.argmax(self.A, axis=-1, out=self.AY)
+                np.equal(self.AY, Y, out=self.AY)
+                np.mean(self.AY, axis=0, keepdims=True, out=self.accuracy)
 
             if bprop:
                 # compute derivative of per-example loss
@@ -92,7 +92,7 @@ class mlogit:
                 np.mean(self.dJdW_, axis=0, out=self.dJdW)
                 np.mean(self.dJdz, axis=0, out=self.dJdb)
 
-        def func_(Z, A_m1, Y=None, bprop=False, accuracy=False):
+        def func_(Z, A_m1, Y=None, loss=False, bprop=False, accuracy=False):
             # compute activations
             self.Z_max_ = np.max(Z, axis=-1)
             self.A = np.subtract(Z, np.expand_dims(self.Z_max_, axis=-1))
@@ -101,18 +101,19 @@ class mlogit:
             np.divide(self.A, np.expand_dims(self.Z_exp_sum_, axis=-1), out=self.A)
 
             # compute batch loss
-            if Y is not None:
+            if loss or bprop:    
                 self.index = np.arange(Y.size)
-
+            
+            if loss:
                 self.arr = np.log(self.Z_exp_sum_)
                 np.add(self.arr, self.Z_max_, out=self.arr)
                 np.subtract(self.arr, Z[self.index, ..., Y], out=self.arr)
                 self.loss = np.mean(self.arr, axis=0, keepdims=True)
 
-                if accuracy:
-                    self.AY = np.argmax(self.A, axis=-1)
-                    np.equal(self.AY, Y, out=self.AY)
-                    self.accuracy = np.mean(self.AY, axis=0, keepdims=True)
+            if accuracy:
+                self.AY = np.argmax(self.A, axis=-1)
+                np.equal(self.AY, Y, out=self.AY)
+                self.accuracy = np.mean(self.AY, axis=0, keepdims=True)
 
             if bprop:
                 # compute derivative of per-example loss
@@ -226,7 +227,8 @@ class Training:
 
         self.completed = False
 
-    def train_minibatch(self):
+
+    def train_minibatch(self, loss=True, accuracy=True, optimize=True):
         batch = next(self.training_it, None)
         if batch is None:
             self.completed = True
@@ -234,7 +236,7 @@ class Training:
 
         X, Y = batch
         self.training_pipeline.feedforward(X)
-        model = self.training_pipeline.run_model(Y=Y, bprop=True, accuracy=True)
+        self.training_pipeline.run_model(Y=Y, bprop=True, accuracy=accuracy)
         self.training_pipeline.bprop()
 
         self.optimizer.run(self.training_pipeline.dJdW, self.training_pipeline.dJdb)
@@ -243,6 +245,30 @@ class Training:
         self.validation_pipeline.feedforward(X)
         model = self.validation_pipeline.run_model(Y=Y, bprop=False, accuracy=True)
 
+        if optimize:
+            for T, DT in ((self.W, self.optimizer.dW), (self.b, self.optimizer.db)):
+                for t, dt in zip(T, DT):
+                    np.add(t, dt, out=t)
+
+    def run_batch(self, **model_kwargs):
+        batch = next(self.training_it, None)
+        if batch is None:
+            self.completed = True
+            return
+
+        X, Y = batch
+        self.training_pipeline.feedforward(X)
+        self.training_pipeline.run_model(Y=Y, **model_kwargs)
+        self.training_pipeline.bprop()
+
+    def validate(self, **model_kwargs):
+        X, Y = self.valset
+        self.validation_pipeline.feedforward(X)
+        self.validation_pipeline.run_model(Y=Y, **model_kwargs)
+
+    def optimize(self):
+        self.optimizer.run(self.training_pipeline.dJdW, self.training_pipeline.dJdb)
         for T, DT in ((self.W, self.optimizer.dW), (self.b, self.optimizer.db)):
-            for t, dt in zip(T, DT):
-                np.add(t, dt, out=t)
+                for t, dt in zip(T, DT):
+                    np.add(t, dt, out=t)
+

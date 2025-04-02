@@ -29,17 +29,35 @@ class DescentPath:
     def __init__(self, ax, len):
         self.arr_ = Array(shape=(len, 3))
         self.path = ax.plot(xs=[], ys=[], zs=[], color="red", lw=2)[0]
+        self.origin_plot = ax.scatter(xs=[], ys=[], zs=[], color="orange", s=20, label="Initial Parameters")
+        self.current_plot = ax.scatter(xs=[], ys=[], zs=[], color="green", s=20, label="Current Parameters")
+        self.origin = None
+        self.current = None
 
     def redraw(self, interp):
         self.arr[2][:] = interp(self.arr[:2].T)
+        if self.origin:
+            (x1, y1) = self.origin
+            z1 = interp([x1, y1])
+            self.origin_plot._offsets3d = ([x1], [y1], z1)
 
     def append(self, x, y, z):
         self.arr_.insert([x, y, z])
 
     def update(self, x, y, z):
         self.append(x, y, z)
-        self.path.set_data_3d(self.arr)
+        
+        pos = (x, y)
+        offsets = ([x], [y], [z])
+        
+        if self.origin is None:
+            self.origin = pos
+            self.origin_plot._offsets3d = offsets
+        
+        self.current = pos
+        self.current_plot._offsets3d = offsets
 
+        self.path.set_data_3d(self.arr)
     @property
     def arr(self):
         return self.arr_.data.T
@@ -168,7 +186,7 @@ class ProjectionGrid:
 
     def compute(self):
         self.pipeline.feedforward(self.X)
-        self.pipeline.run_model(Y=self.Y)
+        self.pipeline.run_model(Y=self.Y, loss=True)
         # self.compute_scaled()
 
     def redraw(self):
@@ -231,6 +249,8 @@ class ProjectionView:
 
         self.descent_path = DescentPath(self.ax, len=pathlen)
         self.surface = None
+
+        self.ax.legend()
 
         self.redraw()
 

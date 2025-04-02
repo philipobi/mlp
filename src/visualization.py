@@ -542,7 +542,7 @@ class MLPVisualization:
 
         # setup cmap and cbar
         cmap.set(
-            mpl.colormaps["tab20c"],
+            mpl.colormaps["tab20b"],
             cmap_red_green,
         )
 

@@ -3,11 +3,9 @@ from mlp import Layer, Training
 from visualization import MLPVisualization, SimplePlot
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
-from math import ceil
-from utils import epoch_it, callback_it, Timer, repeat_it
+from utils import epoch_it, callback_it, Timer
 from projection import ProjectionView, ProjectionLayer, ProjectionAxis
 from time import sleep
-from itertools import count, chain
 
 
 def init_training_data(path, batchsize, valsetsize, epochs):
@@ -66,7 +64,7 @@ class Program:
                 )
 
         self.empty_img = np.zeros((28, 28))
-        
+
         batchsize = 20
         valsetsize = 100
         epochs = 2
@@ -78,9 +76,11 @@ class Program:
             epochs=epochs,
         )
 
+        self.training = Training(layers, self.it, valset)
+
         LayerInterface.n_examples = valsetsize
 
-        self.training = Training(layers, self.it, valset)
+        # hook up layer interfaces for visualization to layer wrappers of validation pipeline
         validation_pipeline = self.training.validation_pipeline
         layer_in = LayerInterface(validation_pipeline.layer_in, width=dims[0])
         layer_in.A_getter = lambda: layer_in.lw.act.A
@@ -132,14 +132,16 @@ class Program:
 
         self.ani = None
 
-        self.visualization.btn_start.on_clicked(self.start)
+        self.ani_running = False
+
+        self.visualization.btn_start.on_clicked(self.btn_start_callback)
 
         self.plot_img(self.empty_img)
-        
-        self.training.train_minibatch()
-        
-        plt.show()
 
+        # make model allocate memory for accuracy calculation
+        self.training.run_batch(bprop=True, accuracy=True)
+
+        plt.show()
 
     def plot_img(self, X):
         self.visualization.ax_img.imshow(
@@ -149,34 +151,16 @@ class Program:
             X=X,
         )
 
-    def animate_training(self, n):
-        """
-        Train on n minibatches, then update plots (accuracy, weights, 3D)
-        """
-        for _ in range(n):
-            self.training.train_minibatch()
-        self.i_training += n
-        
-        model = self.training.training_pipeline.model
-        training_accuracy = model.accuracy[0]
-        model = self.training.validation_pipeline.model
-        validation_accuracy = model.accuracy[0]
-
-        self.accuracy_plot.update(self.i_training, training_accuracy, validation_accuracy)
-        self.visualization.update_weights()
-        self.projection_view.draw_frame()
-
-    
     def animate_ff(self):
         return callback_it(
-            init_func=lambda :(
+            init_func=lambda: (
                 self.visualization.ax_loss_projection.set_visible(False),
                 self.visualization.ax_accuracy.set_visible(False),
                 self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
                 self.visualization.switch_cmap(),
             ),
             it=self.visualization.animate_ff(),
-            callback=lambda:(
+            callback=lambda: (
                 sleep(3),
                 LayerInterface.next_example(),
                 self.visualization.clear_activations(),
@@ -184,60 +168,56 @@ class Program:
                 self.visualization.switch_cmap(),
                 self.visualization.ax_loss_projection.set_visible(True),
                 self.visualization.ax_accuracy.set_visible(True),
+            ),
+        )
+
+    def animate_main(self):
+        while 1:
+            for _ in range(200):
+                N = 5
+                for i in range(N):
+                    if self.training.completed:
+                        return
+                    self.training.run_batch(bprop=True, accuracy=(i == N - 1))
+                    self.training.optimize()
+                self.i_training += N
+                self.training.validate(accuracy=True)
+
+                model = self.training.training_pipeline.model
+                training_accuracy = model.accuracy[0]
+                model = self.training.validation_pipeline.model
+                validation_accuracy = model.accuracy[0]
+
+                self.accuracy_plot.update(
+                    self.i_training, training_accuracy, validation_accuracy
+                )
+                self.visualization.update_weights()
+                self.projection_view.draw_frame()
+
+                yield
+
+            yield from self.animate_ff()
+
+    def btn_start_callback(self, _):
+        if self.ani is None:
+            self.ani_running = True
+            self.i_training = 1
+            self.ani = FuncAnimation(
+                fig=self.visualization.fig,
+                func=lambda _: None,
+                frames=self.animate_main(),
+                cache_frame_data=False,
+                interval=10,
+                repeat=False,
             )
-        )
+            return
 
-    def start(self, _):
-        self.i_training = 1
-        self.ani = FuncAnimation(
-            fig = self.visualization.fig,
-            func= lambda _: None,
-            frames=repeat_it(lambda: self.animate_training(5), 100),
-            cache_frame_data=False,
-            interval=10,
-            repeat=False
-        )
-        
-        
-        return
-        timer = Timer()
-        self.ani = FuncAnimation(
-            fig = self.visualization.fig,
-            func= lambda _: timer.log(),
-            frames=self.animate_ff(),
-            cache_frame_data=False,
-            interval=0,
-            repeat=False
-        )
-        
-        return 
-        
-        self.ani = FuncAnimation(
-            self.visualization.fig,
-            self.update,
-            interval=20,
-            cache_frame_data=False,
-        )
-
-
-    def update(self, n_frame):
-        if not self.training.completed:
-            self.training.train_minibatch()
-
-            model = self.training.training_pipeline.model
-            training_accuracy = model.accuracy[0]
-            model = self.training.validation_pipeline.model
-            validation_accuracy = model.accuracy[0]
-
-            self.accuracy_plot.update(n_frame, training_accuracy, validation_accuracy)
-
-            self.visualization.update_weights()
-
-            self.projection_view.draw_frame()
-        else:
+        if self.ani_running:
+            self.ani_running = False
             self.ani.event_source.stop()
-            self.ani = None
-            print("Training ended.")
+        else:
+            self.ani_running = True
+            self.ani.event_source.start()
 
 
 if __name__ == "__main__":
