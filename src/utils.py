@@ -29,6 +29,9 @@ class Array:
         self.data_[self.i] = val
         self.i += 1
 
+    def clear(self):
+        self.i = 0
+
     @property
     def data(self):
         return self.data_[: self.i]

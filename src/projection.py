@@ -58,6 +58,7 @@ class DescentPath:
         self.current_plot._offsets3d = offsets
 
         self.path.set_data_3d(self.arr)
+    
     @property
     def arr(self):
         return self.arr_.data.T
@@ -249,8 +250,6 @@ class ProjectionView:
 
         self.descent_path = DescentPath(self.ax, len=pathlen)
         self.surface = None
-
-        self.ax.legend()
 
         self.redraw()
 

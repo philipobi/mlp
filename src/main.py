@@ -1,6 +1,6 @@
 import numpy as np
 from mlp import Layer, Training
-from visualization import MLPVisualization, SimplePlot
+from visualization import MLPVisualization, SimplePlot, Node, WindowedPlot
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 from utils import epoch_it, callback_it, Timer
@@ -53,8 +53,10 @@ class Program:
 
     def __init__(self, data_path="data/train.csv"):
 
+        MLPVisualization.maxwidth = 10
+        
         path = "params/small_50epochs_93percent"
-        dims = [28 * 28, 16, 16, 10]
+        dims = [28 * 28, 10, 10, 10]
         layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
         if 0:
             for i, layer in enumerate(layers, start=1):
@@ -96,11 +98,16 @@ class Program:
             layer_out,
         ]
 
-        MLPVisualization.maxwidth = 10
         self.visualization = MLPVisualization(interface_layers, dx=10, dy=5, r=2)
+        
+        # set up node graph
         self.visualization.layers[-1].normalize_activations = False
+        graph = self.visualization.graph
+        r = Node.radius
         for i, node in enumerate(self.visualization.layers[-1].nodes):
-            node.add_label(f"{i}")
+            (x,y) = node.xy
+            graph.annotate(str(i), (x + 1.5*r, y), va="center")
+        graph.autoscale_view()
 
         # Set up descent projection
         X, Y = valset
@@ -119,15 +126,15 @@ class Program:
         )
 
         # Set up accuracy plot
-        self.accuracy_plot = SimplePlot(
-            ax=self.visualization.accuracy_plot,
-            xlims=(0, 100),
-            ylims=(0, 1),
+        self.accuracy_plot = WindowedPlot(
+            ax = self.visualization.ax_accuracy,
+            ylims=(0,1),
             n_plots=2,
+            windowsize=300,
             plot_kwargs=(
                 dict(label="Training Accuracy", color="blue"),
                 dict(label="Validation Accuracy", color="red"),
-            ),
+            )
         )
 
         self.ani = None
@@ -141,6 +148,8 @@ class Program:
         # make model allocate memory for accuracy calculation
         self.training.run_batch(bprop=True, accuracy=True)
 
+        self.visualization.fig.legend(loc="upper left")
+        
         plt.show()
 
     def plot_img(self, X):
@@ -199,9 +208,11 @@ class Program:
             yield from self.animate_ff()
 
     def btn_start_callback(self, _):
+        print("registered click")
         if self.ani is None:
             self.ani_running = True
             self.i_training = 1
+            print("starting animation")
             self.ani = FuncAnimation(
                 fig=self.visualization.fig,
                 func=lambda _: None,
@@ -209,6 +220,7 @@ class Program:
                 cache_frame_data=False,
                 interval=10,
                 repeat=False,
+                blit=False
             )
             return
 
