@@ -28,9 +28,9 @@ class LimitsControl:
 class DescentPath:
     def __init__(self, ax, len):
         self.arr_ = Array(shape=(len, 3))
-        self.path = ax.plot(xs=[], ys=[], zs=[], color="red", lw=2)[0]
-        self.origin_plot = ax.scatter(xs=[], ys=[], zs=[], color="orange", s=20, label="Initial Parameters")
-        self.current_plot = ax.scatter(xs=[], ys=[], zs=[], color="green", s=20, label="Current Parameters")
+        self.path = ax.plot(xs=[], ys=[], zs=[], color="black", lw=2)[0]
+        self.origin_plot = ax.scatter(xs=[], ys=[], zs=[], color="red", s=40, label="Initial Parameters")
+        self.current_plot = ax.scatter(xs=[], ys=[], zs=[], color="blue", s=40, label="Current Parameters")
         self.origin = None
         self.current = None
 
@@ -239,9 +239,10 @@ class ProjectionView:
 
         self.ax = ax
         self.ax.set_zlim(0)
-        self.ax.set_xlabel("ax 1")
-        self.ax.set_ylabel("ax 2")
-        self.ax.set_zlabel("loss")
+        self.ax.set_xlabel(r"$\theta_1$")
+        self.ax.set_ylabel(r"$\theta_2$")
+        self.ax.set_title("Loss Hypersurface Projection", y=0.95, loc="left")
+        self.ax.locator_params(axis="both", nbins=4)
 
         self.grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
         [self.ax1, self.ax2] = self.grid.axes

@@ -95,44 +95,10 @@ class epoch_it(Iterator):
             raise StopIteration
 
 
-class callback_it(Iterator):
-    def __init__(self, it, init_func=None, callback=None):
-        self.it = it
-        self.init_func = init_func
-        self.callback = callback
+
+class task_it(Iterator):
+    def __init__(self, *tasks):
+        self.tasks = iter(tasks)
 
     def __next__(self):
-        if self.init_func is not None:
-            self.init_func()
-            self.init_func = None
-            return None
-        if self.callback is not None:
-            try:
-                return next(self.it)
-            except StopIteration:
-                self.callback()
-                self.callback = None
-                return None
-        return next(self.it)
-
-
-class repeat_it(Iterator):
-    def __init__(self, func, n):
-        self.func = func
-        self.n = n
-        self.i = 0
-
-    def __next__(self):
-        if self.i < self.n:
-            self.i += 1
-            return self.func()
-        else:
-            raise StopIteration
-
-
-def repeat(func, n):
-    def fn():
-        for _ in range(n):
-            func()
-
-    return fn
+        return next(self.tasks)()

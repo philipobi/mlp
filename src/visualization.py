@@ -7,12 +7,12 @@ from matplotlib.colors import (
     SymLogNorm,
     ListedColormap,
 )
-from matplotlib.widgets import TextBox, Button
-from matplotlib.gridspec import GridSpec
+from matplotlib.widgets import Button
 import matplotlib as mpl
 import numpy as np
 from itertools import cycle, zip_longest
 from utils import Iterator, flatten, cmap_red_green, Array
+from matplotlib.lines import Line2D
 
 transitionLinear = lambda x: x
 PatchCollection.update_objects = lambda self: self.set_paths(self.objects)
@@ -46,7 +46,7 @@ class WindowedPlot:
 
         data = self.arr.data.T
         x = data[0]
-        for i, plot in enumerate(self.plots, start = 1):
+        for i, plot in enumerate(self.plots, start=1):
             plot.set_xdata(x)
             plot.set_ydata(data[i])
 
@@ -142,9 +142,8 @@ class Node:
     ctx = Context
 
     def __init__(self, ord, **kwargs):
-        self.parent = None
-        x_ord, y_ord = ord
-        self.xy = (x_ord * self.ctx.dx, y_ord * self.ctx.dy)
+        (self.x_ord, self.y_ord) = ord
+        self.xy = (self.x_ord * self.ctx.dx, self.y_ord * self.ctx.dy)
 
         self.node = Circle(xy=self.xy, radius=Node.radius, **kwargs)
         self.activation = Circle(xy=self.xy, radius=0, **kwargs)
@@ -155,11 +154,11 @@ class OverfullIndicator:
 
     def __init__(self, ord):
         x_ord, y_ord = ord
-        x = x_ord * self.ctx.dx
-        y = y_ord * self.ctx.dy
-        r = Node.radius
+        self.xy = (x_ord * self.ctx.dx, y_ord * self.ctx.dy)
 
-        self.node = Circle(xy=(x, y), radius=r)
+        x, y = self.xy
+        r = Node.radius
+        self.node = Circle(xy=self.xy, radius=r)
         self.circles = [
             Circle(xy=(x + i * r / 2, y), radius=r / 8) for i in range(-1, 2)
         ]
@@ -189,11 +188,10 @@ class LayerVisualization:
         self.m = None
         self.W_size = 0
 
-        self._overfull = False
-        self.overfull_ind = None
-        self.annotated = False
+        self.overfull = False
+        self.overfull_ind = []
 
-        self.nodes_ = []
+        self.nodes = []
 
         self.node_activations = PatchCollection(
             [],
@@ -206,21 +204,30 @@ class LayerVisualization:
         self._visible_edge_weights = lambda W: None
         self._visible_activations = lambda A: None
 
-    @property
-    def nodes(self):
-        return self.nodes_
+    def init_components(self, nodes):
+        """
+        Make auxiliary objects for layer, such as overfull dots, activations and bbox
+        """
 
-    @nodes.setter
-    def nodes(self, nodes):
-        for node in nodes:
-            node.parent = self
-        self.nodes_ = nodes
-        self.node_activations.objects = [node.activation for node in nodes]
+        self.nodes = nodes
+        self.node_activations.objects = [node.activation for node in self.nodes]
 
         r = Node.radius
         pad = r / 2
-        x0, y0 = self.nodes[-1].xy
-        x1, y1 = self.nodes[0].xy
+
+        if not self.overfull:
+            x0, y0 = self.nodes[0].xy
+            x1, y1 = self.nodes[-1].xy
+        else:
+            self.overfull_ind.append(
+                ind0 := OverfullIndicator(ord=(self.i, self.nodes[0].y_ord - 1))
+            )
+            self.overfull_ind.append(
+                ind1 := OverfullIndicator(ord=(self.i, self.nodes[-1].y_ord + 1))
+            )
+            x0, y0 = ind0.xy
+            x1, y1 = ind1.xy
+
         xy = (x0 - r - pad, y0 - r - pad)
         height = y1 - y0 + 2 * r + 2 * pad
         width = x1 - x0 + 2 * r + 2 * pad
@@ -235,16 +242,6 @@ class LayerVisualization:
             )
         )
 
-    @property
-    def overfull(self):
-        return self._overfull
-
-    @overfull.setter
-    def overfull(self, value: bool):
-        self._overfull = value
-        if self.overfull and not self.overfull_ind:
-            self.overfull_ind = OverfullIndicator(ord=(self.i, 0))
-
     def set_activation_rad(self, radii):
         for circle, radius in zip(self.node_activations.objects, radii):
             circle.set_radius(radius)
@@ -254,7 +251,7 @@ class LayerVisualization:
             circle.set_radius(0)
         self.node_activations.update_objects()
 
-    def animate_activation(self, frames):
+    def animate_activation(self):
         arr = np.empty_like(self.visible_activations)
         arr1 = np.empty_like(self.visible_activations)
         (
@@ -272,13 +269,13 @@ class LayerVisualization:
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(i),
                 transition=transitionLinear,
-                frames=20,
+                frames=40,
             ),
-            AnimationSpec(func=func, transition=transitionLinear, frames=15),
+            AnimationSpec(func=func, transition=transitionLinear, frames=40),
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(1 - i),
                 transition=transitionLinear,
-                frames=20,
+                frames=40,
             ),
         ]
 
@@ -356,11 +353,10 @@ class MLPVisualization:
 
     def __init__(self, layers_interfaces, dx, dy, r):
 
+        # mpl.rcParams["toolbar"] = "None"
+        mpl.rcParams["axes3d.mouserotationstyle"] = "azel"
         # create mpl objects
-        self.fig = plt.figure(figsize=(7.2, 9.6), layout="tight")
-        # self.ax0 = self.fig.add_axes((0,0,1,1))
-        # self.ax0.axis("off")
-        # self.ax0.plot([0,1], [0.65, 0.65])
+        fig = self.fig = plt.figure(figsize=(7.2, 9.6))
 
         """
         controls
@@ -368,27 +364,21 @@ class MLPVisualization:
         img graph cbar
         """
 
-        gs = GridSpec(nrows=3, ncols=1, figure=self.fig)
-        gs.set_height_ratios((2, 38, 60))
+        ax_btn_start = fig.add_axes((0.9, 0.97, 0.05, 0.02))
 
-        gs_controls = gs[0, 0].subgridspec(nrows=1, ncols=2)
-        # ax_btn_cmap = self.fig.add_subplot(gs_controls[0, -3])
-        # ax_box_dxdy = self.fig.add_subplot(gs_controls[0, -2])
-        ax_btn_start = self.fig.add_subplot(gs_controls[0, -1])
-        gs_controls.set_width_ratios((85, 15))
+        ax_accuracy = fig.add_axes((0.08, 0.64, 0.25, 0.2))
+        ax_loss_projection = fig.add_axes((0.3, 0.61, 0.75, 0.35), projection="3d")
 
-        gs_plots = gs[1, 0].subgridspec(nrows=2, ncols=2)
-        gs_plots.set_height_ratios((20, 80))
-        gs_plots.set_width_ratios((35, 65))
-        ax_accuracy = self.fig.add_subplot(gs_plots[1, 0])
-        ax_loss_projection = self.fig.add_subplot(gs_plots[:, 1], projection="3d")
+        ax_img = fig.add_axes((0.05, 0.01, 0.13, 0.59))
+        ax_graph = fig.add_axes((0.19, 0.00, 0.73, 0.59))
+        ax_cbar = fig.add_axes((0.93, 0.2, 0.02, 0.2))
 
-        gs_graph = gs[2, 0].subgridspec(nrows=3, ncols=4)
-        gs_graph.set_width_ratios((15, 80, 3, 2))
-        gs_graph.set_height_ratios((30, 40, 30))
-        ax_img = self.fig.add_subplot(gs_graph[:, 0])
-        ax_graph = self.fig.add_subplot(gs_graph[:, 1])
-        ax_cbar = self.fig.add_subplot(gs_graph[1, 2])
+        x = 0.37
+        y = 0.58
+        self.div_lines = [
+            fig.add_artist(Line2D([0, 1], [y, y], color="black")),
+            fig.add_artist(Line2D([x, x], [y, 1], color="black")),
+        ]
 
         self.graph = ax_graph
         self.graph.axis("off")
@@ -413,33 +403,31 @@ class MLPVisualization:
         previous = None
         for x_ord, layer in enumerate(self.layers):
             layer.previous = previous
-            nodes1 = []
-            nodes2 = []
+
             N = layer.width if not layer.overfull else self.maxwidth
             n = int(N / 2)
+            centered = N % 2 == 1
+            y_off = 0 if centered else 0.5
+
+            nodes = [
+                Node((x_ord, y_ord + y_off))
+                for y_ord in range(-n, n + (1 if centered else 0))
+            ]
 
             if layer.overfull:
-                for k in range(n):
-                    y_ord = n - k
-                    nodes1.append(Node((x_ord, y_ord)))
-                    nodes2.append(Node((x_ord, -y_ord)))
-
                 w = int(layer.width / 2)
-                layer.set_visible_nodes(n=w - n, m=w + n - 1)
-
+                i_n = w - n
+                i_m = i_n + N
+                layer.set_visible_nodes(n=i_n, m=i_m)
             else:
-                centered = N % 2 == 1
-                y_off = 0 if centered else -0.5
-                for k in range(n):
-                    y_ord = n - k + y_off
-                    nodes1.append(Node((x_ord, y_ord)))
-                    nodes2.append(Node((x_ord, -y_ord)))
-                if centered:
-                    nodes1.append(Node((x_ord, 0)))
                 layer.set_visible_nodes(n=0, m=0)
 
-            nodes2.reverse()
-            layer.nodes = [*nodes1, *nodes2]
+            if x_ord == 0:
+                i_n = 15 * 28 + 15 - n
+                i_m = i_n + N
+                layer.set_visible_nodes(n=i_n, m=i_m)
+
+            layer.init_components(nodes)
 
             previous = layer
 
@@ -448,7 +436,11 @@ class MLPVisualization:
         # create node collection
         nodes = [node.node for layer in self.layers for node in layer.nodes]
         nodes.extend(
-            [layer.overfull_ind.node for layer in self.layers if layer.overfull]
+            [
+                overfull_ind.node
+                for layer in self.layers
+                for overfull_ind in layer.overfull_ind
+            ]
         )
         self.nodes = PatchCollection(
             nodes,
@@ -463,8 +455,8 @@ class MLPVisualization:
         overfull_dots = [
             circle
             for layer in self.layers
-            if layer.overfull
-            for circle in layer.overfull_ind.circles
+            for overfull_ind in layer.overfull_ind
+            for circle in overfull_ind.circles
         ]
         self.overfull_dots = PatchCollection(
             overfull_dots, zorder=2, facecolor="#bdbdbd", edgecolor="none"
@@ -490,10 +482,11 @@ class MLPVisualization:
             self.graph.add_collection(layer.node_activations)
 
         bbox = max(self.layers, key=lambda l: l.width).bbox
-        x0 = 0
-        x1 = len(self.layers) * dx
         y0 = bbox.get_y()
         y1 = y0 + bbox.get_height()
+        x0 = self.layers[0].bbox.get_x()
+        bbox = self.layers[-1].bbox
+        x1 = bbox.get_x() + bbox.get_width()
         dataLim = ax_graph.dataLim
         dataLim.x0 = x0
         dataLim.x1 = x1
@@ -501,11 +494,7 @@ class MLPVisualization:
         dataLim.y1 = y1
 
         # make controls
-        # self.box_dxdy = TextBox(ax=ax_box_dxdy, label="(dx, dy)")
-        # self.box_dxdy.label.set_fontsize("x-small")
-        # self.box_dxdy.on_submit(self.update_geometry)
-        # self.box_dxdy.set_val(f"{Context.dx}, {Context.dy}")
-        self.btn_start = Button(ax=ax_btn_start, label="Start/Pause")
+        self.btn_start = Button(ax=ax_btn_start, label="Run")
         self.btn_start.label.set_fontsize("x-small")
 
         self.ax_img = ax_img
@@ -546,7 +535,7 @@ class MLPVisualization:
         self.cbar = self.fig.colorbar(
             mpl.cm.ScalarMappable(norm=Normalize(vmin=0, vmax=1), cmap=self.cmap.cmap),
             cax=self.cbar_ax,
-            location="right",
+            location="left",
             orientation="vertical",
             label=r"$\text{LogNorm}(W_{ij})$",
         )
@@ -568,7 +557,7 @@ class MLPVisualization:
     def animate_ff(self):
         yield from AnimationIterator(
             flatten(
-                map(lambda layer: layer.animate_activation(frames=30), self.layers),
+                map(lambda layer: layer.animate_activation(), self.layers),
                 dim=2,
             )
         )
@@ -576,3 +565,7 @@ class MLPVisualization:
     def clear_activations(self):
         for layer in self.layers:
             layer.reset_activation_rad()
+
+    def set_div_alpha(self, val):
+        for line in self.div_lines:
+            line.set_alpha(val)
