@@ -242,7 +242,8 @@ class ProjectionView:
         self.ax.set_xlabel(r"$\theta_1$")
         self.ax.set_ylabel(r"$\theta_2$")
         self.ax.set_title("Loss Hypersurface Projection", y=0.95, loc="left")
-        self.ax.locator_params(axis="both", nbins=4)
+        self.ax.locator_params(axis="x", nbins=5)
+        self.ax.locator_params(axis="y", nbins=5)
 
         self.grid = ProjectionGrid(layers=proj_layers, X=X, Y=Y)
         [self.ax1, self.ax2] = self.grid.axes

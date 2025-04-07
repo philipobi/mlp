@@ -57,10 +57,10 @@ class Program:
         MLPVisualization.maxwidth = 10
 
         path = "params/small_50epochs_93percent"
-        dims = [28 * 28, 10, 10, 10]
-        dims = [28 * 28, 16, 16, 10]
+        dims = [28 * 28, 10, 10, 10, 10]
+        #dims = [28 * 28, 16, 16, 10]
         self.layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
-        if 1:
+        if 0:
             for i, layer in enumerate(self.layers, start=1):
                 layer.load_params(
                     wpath=path + f"/W{i}.npy",
@@ -69,18 +69,18 @@ class Program:
 
         self.empty_img = np.zeros((28, 28))
 
-        batchsize = 20
+        batchsize = 100
         valsetsize = 100
-        epochs = 2
+        epochs = 10
 
-        N, self.it, valset = init_training_data(
+        N, self.it, self.valset = init_training_data(
             data_path,
             batchsize=batchsize,
             valsetsize=valsetsize,
             epochs=epochs,
         )
 
-        self.training = Training(self.layers, self.it, valset)
+        self.training = Training(self.layers, self.it, self.valset, alpha=0.005)
 
         LayerInterface.n_examples = valsetsize
 
@@ -109,23 +109,10 @@ class Program:
         for i, node in enumerate(self.visualization.layers[-1].nodes):
             (x, y) = node.xy
             graph.annotate(str(i), (x + 2. * r, y), va="center")
-        graph.autoscale_view()
 
         # Set up descent projection
-        X, Y = valset
-        proj_layers = [ProjectionLayer(layer) for layer in self.layers]
-        proj_layer = proj_layers[-1]
-        proj_layer.add_axes(
-            b=(ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),),
-            W=(ProjectionAxis(arr=proj_layer.layer.W, pos=(7, 0), num=100),),
-        )
-        self.projection_view = ProjectionView(
-            self.visualization.ax_loss_projection,
-            proj_layers,
-            X=X,
-            Y=Y,
-            update_interval=100,
-        )
+        self.projection_view = None
+        self.reset_projection_view()
 
         # Set up accuracy plot
         self.accuracy_plot = WindowedPlot(
@@ -148,6 +135,7 @@ class Program:
         self.ani_running = False
 
         self.visualization.btn_start.on_clicked(self.btn_start_callback)
+        self.visualization.btn_reset.on_clicked(self.reset_projection_view)
 
         self.plot_img(self.empty_img)
 
@@ -157,7 +145,26 @@ class Program:
         self.visualization.fig.legend(loc="upper left")
 
         plt.show()
-
+    
+    def reset_projection_view(self, _=None):
+        ax = self.visualization.ax_loss_projection
+        if self.projection_view is not None:
+            ax.clear()
+        self.proj_layers = [ProjectionLayer(layer) for layer in self.layers]
+        proj_layer = self.proj_layers[-1]
+        proj_layer.add_axes(
+            b=(ProjectionAxis(arr=proj_layer.layer.b, pos=(0,), num=100),),
+            W=(ProjectionAxis(arr=proj_layer.layer.W, pos=(7, 0), num=100),),
+        )
+        X, Y = self.valset
+        self.projection_view = ProjectionView(
+            ax,
+            self.proj_layers,
+            X=X,
+            Y=Y,
+            update_interval=5,
+        )
+    
     def plot_img(self, X):
         self.visualization.ax_img.imshow(
             cmap="gray_r",
@@ -215,7 +222,7 @@ class Program:
 
     def animate_main(self):
         while 1:
-            for _ in range(50):
+            for _ in range(5):
                 N = 5
                 for i in range(N):
                     if self.training.completed:

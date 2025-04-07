@@ -239,6 +239,7 @@ class LayerVisualization:
                 facecolor="none",
                 edgecolor="#bdbdbd",
                 alpha=0.0,
+                linewidth=2.5,
             )
         )
 
@@ -269,13 +270,13 @@ class LayerVisualization:
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(i),
                 transition=transitionLinear,
-                frames=40,
+                frames=50,
             ),
-            AnimationSpec(func=func, transition=transitionLinear, frames=40),
+            AnimationSpec(func=func, transition=transitionLinear, frames=30),
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(1 - i),
                 transition=transitionLinear,
-                frames=40,
+                frames=50,
             ),
         ]
 
@@ -365,12 +366,13 @@ class MLPVisualization:
         """
 
         ax_btn_start = fig.add_axes((0.9, 0.97, 0.05, 0.02))
+        ax_btn_reset = fig.add_axes((0.85, 0.97, 0.05, 0.02))
 
         ax_accuracy = fig.add_axes((0.08, 0.64, 0.25, 0.2))
         ax_loss_projection = fig.add_axes((0.3, 0.61, 0.75, 0.35), projection="3d")
 
-        ax_img = fig.add_axes((0.05, 0.01, 0.13, 0.59))
-        ax_graph = fig.add_axes((0.19, 0.00, 0.73, 0.59))
+        ax_img = fig.add_axes((0.05, 0.01, 0.15, 0.59))
+        ax_graph = fig.add_axes((0.12, 0.00, 0.8, 0.59))
         ax_cbar = fig.add_axes((0.93, 0.2, 0.02, 0.2))
 
         x = 0.37
@@ -481,22 +483,24 @@ class MLPVisualization:
         for layer in self.layers:
             self.graph.add_collection(layer.node_activations)
 
+        #make controls
+        self.btn_start = Button(ax=ax_btn_start, label="Run")
+        self.btn_start.label.set_fontsize("x-small")
+
+        self.btn_reset = Button(ax=ax_btn_reset, label="Res")
+        self.btn_reset.label.set_fontsize("x-small")
+        
+        #set various plot parameters
         bbox = max(self.layers, key=lambda l: l.width).bbox
         y0 = bbox.get_y()
         y1 = y0 + bbox.get_height()
         x0 = self.layers[0].bbox.get_x()
         bbox = self.layers[-1].bbox
         x1 = bbox.get_x() + bbox.get_width()
-        dataLim = ax_graph.dataLim
-        dataLim.x0 = x0
-        dataLim.x1 = x1
-        dataLim.y0 = y0
-        dataLim.y1 = y1
 
-        # make controls
-        self.btn_start = Button(ax=ax_btn_start, label="Run")
-        self.btn_start.label.set_fontsize("x-small")
-
+        self.graph.set_xlim(x0, x1 + 2.5)
+        self.graph.set_ylim(y0 - 2, y1 + 2)
+        
         self.ax_img = ax_img
         self.ax_img.axis("off")
 
@@ -522,14 +526,9 @@ class MLPVisualization:
         self.cbar_ax = ax_cbar
         self.make_cbar()
 
-        # add button for switching cbar
-        # self.btn_cmap = Button(ax=ax_btn_cmap, label="Switch cmap")
-        # self.btn_cmap.on_clicked(self.switch_cmap)
-
         # init weight colors
         self.update_weights()
 
-        # self.fig.get_layout_engine().set(h_pad = 8/72)
 
     def make_cbar(self):
         self.cbar = self.fig.colorbar(
@@ -537,8 +536,9 @@ class MLPVisualization:
             cax=self.cbar_ax,
             location="left",
             orientation="vertical",
-            label=r"$\text{LogNorm}(W_{ij})$",
+            label="Weight values",
         )
+        self.cbar.set_ticks(ticks=[0, .5, 1], labels=['-', '0', '+'])
 
     def switch_cmap(self, _=None):
         self.cmap = next(self.cmaps)
