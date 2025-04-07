@@ -239,7 +239,7 @@ class LayerVisualization:
                 facecolor="none",
                 edgecolor="#bdbdbd",
                 alpha=0.0,
-                linewidth=2.5,
+                linewidth=2,
             )
         )
 

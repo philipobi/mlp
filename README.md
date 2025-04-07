@@ -1,7 +1,5 @@
 # Deep learning with neural networks and programming neural networks in Python
 
-![](./visualization.gif)
-
 ## Installation
 ```shell
 git clone https://github.com/coolusername891/deep-learning-comphy-ws2425.git

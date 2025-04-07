@@ -113,6 +113,11 @@ class Program:
         # Set up descent projection
         self.projection_view = None
         self.reset_projection_view()
+        ax = self.projection_view.ax
+        ax.set_xlabel(r"$W^{(4)}_{8 1}$")
+        ax.set_ylabel(r"$b^{(4)}_1$")
+        ax.xaxis.set_rotate_label(False)
+        ax.yaxis.set_rotate_label(False)
 
         # Set up accuracy plot
         self.accuracy_plot = WindowedPlot(
@@ -222,7 +227,7 @@ class Program:
 
     def animate_main(self):
         while 1:
-            for _ in range(5):
+            for _ in range(200):
                 N = 5
                 for i in range(N):
                     if self.training.completed:
@@ -263,6 +268,8 @@ class Program:
             return
 
         if self.ani_running:
+            layer = self.layers[-1]
+            print(layer.W[7,0], layer.b[0])
             self.ani_running = False
             self.ani.event_source.stop()
         else:
