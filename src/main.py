@@ -9,10 +9,13 @@ from time import sleep
 from itertools import chain
 from matplotlib import ticker
 
+rng = np.random.default_rng(12345)
 
 def init_training_data(path, batchsize, valsetsize, epochs):
 
     data = np.loadtxt(path, skiprows=1, delimiter=",", dtype=int)
+    rng.shuffle(data)
+
     valset = data[:valsetsize]
     valset = (valset[:, 1:] / 255, valset[:, 0])
     trainset = data[valsetsize:]
@@ -34,7 +37,11 @@ class LayerInterface:
     def next_example(cls):
         cls.i += 1
         if cls.i == cls.n_examples:
-            cls.i = 0
+            cls.reset_counter()
+    
+    @classmethod
+    def reset_counter(cls):
+        cls.i = 0
 
     def __init__(self, layer_wrapped, width=None):
         self.lw = layer_wrapped
@@ -54,11 +61,13 @@ class Program:
 
     def __init__(self, data_path="data/train.csv"):
 
+        Layer.rng = rng
+
         MLPVisualization.maxwidth = 10
 
         path = "params/small_50epochs_93percent"
         dims = [28 * 28, 10, 10, 10, 10]
-        #dims = [28 * 28, 16, 16, 10]
+        # dims = [28 * 28, 16, 16, 10]
         self.layers = [Layer(i, j) for i, j in zip(dims[:-1], dims[1:])]
         if 0:
             for i, layer in enumerate(self.layers, start=1):
@@ -67,9 +76,7 @@ class Program:
                     bpath=path + f"/b{i}.npy",
                 )
 
-        self.empty_img = np.zeros((28, 28))
-
-        batchsize = 100
+        batchsize = 20
         valsetsize = 100
         epochs = 10
 
@@ -80,7 +87,7 @@ class Program:
             epochs=epochs,
         )
 
-        self.training = Training(self.layers, self.it, self.valset, alpha=0.005)
+        self.training = Training(self.layers, self.it, self.valset, alpha=0.002)
 
         LayerInterface.n_examples = valsetsize
 
@@ -108,7 +115,7 @@ class Program:
         r = Node.radius
         for i, node in enumerate(self.visualization.layers[-1].nodes):
             (x, y) = node.xy
-            graph.annotate(str(i), (x + 2. * r, y), va="center")
+            graph.annotate(str(i), (x + 2.0 * r, y), va="center")
 
         # Set up descent projection
         self.projection_view = None
@@ -132,7 +139,7 @@ class Program:
         )
         ax = self.accuracy_plot.ax
         ax.set_xlabel("Batches")
-        ax.yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.0%}'))
+        ax.yaxis.set_major_formatter(ticker.StrMethodFormatter("{x:.0%}"))
         ax.set_title("Accuracy", loc="left")
 
         self.ani = None
@@ -142,7 +149,12 @@ class Program:
         self.visualization.btn_start.on_clicked(self.btn_start_callback)
         self.visualization.btn_reset.on_clicked(self.reset_projection_view)
 
-        self.plot_img(self.empty_img)
+        self.img = self.visualization.ax_img.imshow(
+            cmap="gray_r",
+            vmin=0,
+            vmax=1,
+            X=np.zeros((28, 28)),
+        )
 
         # make model allocate memory for accuracy calculation
         self.training.run_batch(bprop=True, accuracy=True)
@@ -150,7 +162,7 @@ class Program:
         self.visualization.fig.legend(loc="upper left")
 
         plt.show()
-    
+
     def reset_projection_view(self, _=None):
         ax = self.visualization.ax_loss_projection
         if self.projection_view is not None:
@@ -167,33 +179,49 @@ class Program:
             self.proj_layers,
             X=X,
             Y=Y,
-            update_interval=5,
+            update_interval=20,
         )
-    
-    def plot_img(self, X):
-        self.visualization.ax_img.imshow(
-            cmap="gray_r",
-            vmin=0,
-            vmax=1,
-            X=X,
+
+    def animate_ff_wrapper(self, n=1):
+        # fmt: off
+        yield from task_it(
+            lambda: (
+                self.visualization.ax_loss_projection.set_visible(False),
+                self.visualization.ax_accuracy.set_visible(False),
+                self.visualization.set_div_alpha(0),
+                self.visualization.text_validating.set_alpha(1),
+            ),
+            lambda: (
+                sleep(1),
+                self.visualization.switch_cmap(),
+            ),
         )
+        for _ in range(n):
+            yield from self.animate_ff()
+        yield from task_it(
+            lambda: (
+                sleep(1),
+                self.visualization.switch_cmap(),
+            ),
+            lambda: (
+                sleep(1),
+                self.visualization.ax_loss_projection.set_visible(True),
+                self.visualization.ax_accuracy.set_visible(True),
+                self.visualization.text_validating.set_alpha(0),
+                self.visualization.set_div_alpha(1),
+            ),
+            lambda: sleep(1)
+        )
+        # fmt: on
 
     def animate_ff(self):
         # fmt:off
         return chain(
             task_it(
                 lambda: (
-                    self.visualization.ax_loss_projection.set_visible(False),
-                    self.visualization.ax_accuracy.set_visible(False),
-                    self.visualization.set_div_alpha(0),
-                ),
-                lambda: (
                     sleep(1),
-                    self.visualization.switch_cmap(),
-                ),
-                lambda: (
-                    sleep(1),
-                    self.plot_img(np.reshape(self.layer_in.activation, shape=(28, 28))),
+                    self.img.set_data(np.reshape(self.layer_in.activation, shape=(28, 28))),
+                    self.visualization.ax_img.set_visible(True)
                 ),
                 lambda: sleep(1),
             ),
@@ -205,20 +233,7 @@ class Program:
                     sleep(1),
                     LayerInterface.next_example(),
                     self.visualization.clear_activations(),
-                ),
-                lambda: (
-                    sleep(1),
-                    self.plot_img(self.empty_img),
-                ),
-                lambda: (
-                    sleep(1),
-                    self.visualization.switch_cmap(),
-                ),
-                lambda: (
-                    sleep(1),
-                    self.visualization.ax_loss_projection.set_visible(True),
-                    self.visualization.ax_accuracy.set_visible(True),
-                    self.visualization.set_div_alpha(1),
+                    self.visualization.ax_img.set_visible(False)
                 ),
                 lambda: sleep(1)
             ),
@@ -226,11 +241,16 @@ class Program:
         # fmt:on
 
     def animate_main(self):
+        steps = [(50, 10), (200, 1), (200, 2), (150, 5)]
+        init = True
         while 1:
-            for _ in range(200):
+            if steps:
+                (M, n) = steps.pop(0)
+            for _ in range(M):
                 N = 5
                 for i in range(N):
                     if self.training.completed:
+                        print("Training completed")
                         return
                     self.training.run_batch(bprop=True, accuracy=(i == N - 1))
                     self.training.optimize()
@@ -250,7 +270,13 @@ class Program:
 
                 yield
 
-            yield from self.animate_ff()
+                sleep(0.06)
+
+            yield from self.animate_ff_wrapper(n = n)
+
+            if init:
+                init = False
+                LayerInterface.reset_counter()
 
     def btn_start_callback(self, _):
         if self.ani is None:
@@ -261,7 +287,7 @@ class Program:
                 func=lambda _: None,
                 frames=self.animate_main(),
                 cache_frame_data=False,
-                interval=10,
+                interval=6,
                 repeat=False,
                 blit=False,
             )
@@ -269,7 +295,7 @@ class Program:
 
         if self.ani_running:
             layer = self.layers[-1]
-            print(layer.W[7,0], layer.b[0])
+            print(layer.W[7, 0], layer.b[0])
             self.ani_running = False
             self.ani.event_source.stop()
         else:

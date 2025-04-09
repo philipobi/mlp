@@ -270,13 +270,13 @@ class LayerVisualization:
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(i),
                 transition=transitionLinear,
-                frames=50,
+                frames=30,
             ),
             AnimationSpec(func=func, transition=transitionLinear, frames=30),
             AnimationSpec(
                 func=lambda i: self.bbox.set_alpha(1 - i),
                 transition=transitionLinear,
-                frames=50,
+                frames=30,
             ),
         ]
 
@@ -354,7 +354,7 @@ class MLPVisualization:
 
     def __init__(self, layers_interfaces, dx, dy, r):
 
-        # mpl.rcParams["toolbar"] = "None"
+        mpl.rcParams["toolbar"] = "None"
         mpl.rcParams["axes3d.mouserotationstyle"] = "azel"
         # create mpl objects
         fig = self.fig = plt.figure(figsize=(7.2, 9.6))
@@ -491,6 +491,8 @@ class MLPVisualization:
         self.btn_reset.label.set_fontsize("x-small")
         
         #set various plot parameters
+        self.text_validating = fig.text(0.02, 0.6, "Validating current parameters ...", fontsize="large")
+        self.text_validating.set_alpha(0)
         bbox = max(self.layers, key=lambda l: l.width).bbox
         y0 = bbox.get_y()
         y1 = y0 + bbox.get_height()
@@ -503,6 +505,7 @@ class MLPVisualization:
         
         self.ax_img = ax_img
         self.ax_img.axis("off")
+        self.ax_img.set_visible(False)
 
         self.ax_loss_projection = ax_loss_projection
 

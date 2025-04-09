@@ -29,8 +29,8 @@ class DescentPath:
     def __init__(self, ax, len):
         self.arr_ = Array(shape=(len, 3))
         self.path = ax.plot(xs=[], ys=[], zs=[], color="black", lw=2)[0]
-        self.origin_plot = ax.scatter(xs=[], ys=[], zs=[], color="red", s=40, label="Initial Parameters")
-        self.current_plot = ax.scatter(xs=[], ys=[], zs=[], color="blue", s=40, label="Current Parameters")
+        self.origin_plot = ax.scatter(xs=[], ys=[], zs=[], color="blue", s=40, label="Initial Parameters")
+        self.current_plot = ax.scatter(xs=[], ys=[], zs=[], color="red", s=40, label="Current Parameters")
         self.origin = None
         self.current = None
 

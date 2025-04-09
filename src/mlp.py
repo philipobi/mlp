@@ -133,10 +133,11 @@ class mlogit:
 
 
 class Layer:
+    rng = np.random.default_rng()
     def __init__(self, i, j):
         self.width = j
-        self.W = np.random.rand(i, j)
-        self.b = np.random.rand(j)
+        self.W = self.rng.uniform(low=-.5, high=.5, size=(i, j))
+        self.b = self.rng.uniform(low=-.5, high=.5, size=(j,))
 
     def load_params(self, wpath, bpath):
         self.W = np.load(wpath)
