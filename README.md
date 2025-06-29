@@ -1,9 +1,10 @@
-# Deep learning with neural networks and programming neural networks in Python
+# MLP Visualization
+<img src="showcase.gif" width="400"/>
 
 ## Installation
 ```shell
-git clone https://github.com/coolusername891/deep-learning-comphy-ws2425.git
-cd deep-learning-comphy-ws2425
+git clone https://github.com/philipobi/mlp.git
+cd mlp
 
 python3 -m venv .venv
 source .venv/bin/activate
